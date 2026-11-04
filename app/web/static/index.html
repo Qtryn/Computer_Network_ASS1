@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Student Collaboration App</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: Arial, sans-serif; background: #f6f7f9; color: #20232a; margin: 0; }
+    main { max-width: 900px; margin: 24px auto; padding: 20px; background: white; border: 1px solid #ddd; border-radius: 8px; }
+    h1 { font-size: 21px; margin: 0 0 8px; }
+    p, label { font-size: 14px; }
+    .line { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 10px 0; }
+    input[type=text], select { padding: 9px; border: 1px solid #aaa; border-radius: 4px; }
+    input[type=text] { flex: 1; min-width: 190px; }
+    button { padding: 9px 14px; cursor: pointer; }
+    #feed { height: 330px; overflow-y: auto; border: 1px solid #ddd; background: #fafafa; padding: 8px; }
+    .event { padding: 5px 3px; border-bottom: 1px solid #eee; font-size: 14px; overflow-wrap: anywhere; }
+    .muted { color: #666; }
+    .error { color: #b42318; }
+    progress { width: 220px; vertical-align: middle; }
+    footer { color: #666; font-size: 12px; margin-top: 15px; }
+  </style>
+</head>
+<body>
+<main>
+  <h1>Collaboration App — Local Demo</h1>
+  <p id="status" class="muted">Connecting...</p>
+  <div class="line"><b>Online users:</b> <span id="online">...</span></div>
+  <div class="line">
+    <label for="recipient">Send to</label>
+    <select id="recipient"><option value="*">Everyone (broadcast)</option></select>
+  </div>
+  <div id="feed" aria-label="Messages and transfer events"></div>
+  <form id="chat-form" class="line">
+    <input id="message" type="text" maxlength="600" placeholder="Type your message" required>
+    <button type="submit">Send message</button>
+  </form>
+  <form id="file-form" class="line">
+    <input type="file" id="file" required>
+    <button type="submit">Send file to selected user</button>
+  </form>
+  <div class="line"><span>Last transfer:</span><progress id="progress" value="0" max="100"></progress><span id="progress-label">0%</span></div>
+  <footer>Plain browser JS + local Python HTTP. Chat and files are sent over encrypted UDP from the Python client.</footer>
+</main>
+<script>
+  let cursor = 0;
+  const $ = (id) => document.getElementById(id);
+  function addLine(text, isError = false) {
+    const line = document.createElement('div');
+    line.className = 'event' + (isError ? ' error' : '');
+    line.textContent = text; // Never interpret chat as HTML.
+    $('feed').appendChild(line);
+    $('feed').scrollTop = $('feed').scrollHeight;
+    if ($('feed').children.length > 250) $('feed').firstChild.remove();
+  }
+  async function api(path, options) {
+    const response = await fetch(path, options);
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || 'Request failed');
+    return data;
+  }
+  async function refresh() {
+    try {
+      const data = await api('/api/state?after=' + cursor);
+      $('status').textContent = 'User: ' + data.username + (data.connected ? ' | Connected' : ' | Disconnected');
+      $('online').textContent = data.online.join(', ') || '(none)';
+      const current = $('recipient').value;
+      const recipients = data.online.filter(user => user !== data.username);
+      $('recipient').replaceChildren(new Option('Everyone (broadcast)', '*'));
+      for (const user of recipients) $('recipient').add(new Option(user, user));
+      $('recipient').value = (current === '*' || recipients.includes(current)) ? current : '*';
+      for (const event of data.events) {
+        if (event.id <= cursor) continue;
+        cursor = event.id;
+        if (event.type === 'CHAT') {
+          addLine('[' + event.sender + ' → ' + (event.recipient === '*' ? 'everyone' : event.recipient) + '] ' + event.text);
+        } else if (event.type === 'ERROR') {
+          addLine('ERROR: ' + event.message, true);
+        } else if (event.type === 'FILE_COMPLETE') {
+          addLine('File received and SHA-256 verified: ' + event.path);
+        } else if (event.type === 'FILE_RECEIPT') {
+          addLine('Receiver ' + event.sender + ': ' + event.status + ' (' + event.message + ')');
+        } else if (event.type === 'UPLOAD_SENT') {
+          addLine('Server acknowledged all file chunks; waiting for recipient');
+        } else if (event.type === 'INFO') {
+          addLine(event.message);
+        } else if (event.type === 'FILE_PROGRESS' || event.type === 'UPLOAD_PROGRESS') {
+          $('progress').value = event.percent;
+          $('progress-label').textContent = event.percent + '%';
+        }
+      }
+    } catch (err) { $('status').textContent = 'UI error: ' + err.message; }
+  }
+  $('chat-form').addEventListener('submit', async (event) => {
+    event.preventDefault();
+    try {
+      await api('/api/chat', {method:'POST', headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({recipient:$('recipient').value, text:$('message').value})});
+      $('message').value = '';
+      await refresh();
+    } catch (err) { addLine('Send failed: ' + err.message, true); }
+  });
+  $('file-form').addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const file = $('file').files[0];
+    const recipient = $('recipient').value;
+    if (!file || recipient === '*') {
+      addLine('Choose a file and a specific online recipient first.', true); return;
+    }
+    try {
+      await api('/api/file?to=' + encodeURIComponent(recipient), {
+        method:'POST', headers:{'X-Filename':encodeURIComponent(file.name)}, body:file});
+      addLine('File uploaded locally; sending encrypted UDP chunks...');
+    } catch (err) { addLine('File upload failed: ' + err.message, true); }
+  });
+  refresh();
+  setInterval(refresh, 1000);
+</script>
+</body>
+</html>
