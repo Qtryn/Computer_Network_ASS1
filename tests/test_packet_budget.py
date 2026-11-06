@@ -87,6 +87,18 @@ class ChatPacketBudgetTests(unittest.TestCase):
                 self.assertLessEqual(size, MAX_DATAGRAM,
                                      f"accepted {label} text needs {size} B > {MAX_DATAGRAM}")
 
+    def test_escaped_text_at_datagram_boundary(self):
+        empty = {"type": "CHAT", "sender": USER, "recipient": USER, "text": "", "token": TOKEN}
+        budget = MAX_DATAGRAM - wire_size(empty)
+        for character, encoded_size in [('"', 2), ("\\", 2), ("\x00", 6)]:
+            with self.subTest(character=repr(character)):
+                count, remainder = divmod(budget, encoded_size)
+                text = character * count + "x" * remainder
+                event = ChatService.build_message(USER, USER, text)
+                self.assertEqual(wire_size({**event, "token": TOKEN}), MAX_DATAGRAM)
+                with self.assertRaises(ValueError):
+                    ChatService.build_message(USER, USER, text + "x")
+
 
 if __name__ == "__main__":
     unittest.main()
