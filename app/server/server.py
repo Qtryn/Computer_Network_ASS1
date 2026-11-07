@@ -4,32 +4,53 @@ TCP = handshake/login/heartbeat. UDP = chat/file payloads via Member 2.
 The server does not store user files or decrypt them to disk; it relays chunks.
 """
 import json
+import math
 import socket
 import threading
 import time
 import uuid
 
+from app.common.config import PROTOCOL_VERSION
+from app.server.auth import USERNAME
 from app.server.registry import UserRegistry
 from app.transport.reliable_udp import CHAT_STREAM, ReliableUDP
 from app.features.chat import ChatService
 
 FILE_TYPES = {"FILE_START", "FILE_CHUNK", "FILE_END"}
+MAX_CONTROL_LINE = 4096
+MAX_CONNECTIONS = 64
+CONTROL_IDLE_SECONDS = 12
 
 
 class CollaborationServer:
-    def __init__(self, host, tcp_port, udp_port, key):
+    def __init__(self, host, tcp_port, udp_port, key, *, accounts=None,
+                 tls_context=None, session_seconds=3600, clock=time.monotonic):
+        if (accounts is None) != (tls_context is None):
+            raise ValueError("Password accounts and a server TLS context are required together")
         self.host = host
-        self.registry = UserRegistry()
+        self.accounts = accounts
+        self.tls_context = tls_context
+        self.clock = clock
+        self.registry = UserRegistry(session_seconds=session_seconds, clock=clock)
         self.running = threading.Event()
         self.running.set()
+        self.connections_lock = threading.Lock()
+        self.connections = {}  # worker thread -> current socket, including pre-login
+        self.roster_changed = threading.Event()
         self.transfer_lock = threading.Lock()
         self.transfers = {}  # file_id -> (original sender, receiving username)
-        self.udp = ReliableUDP(host, udp_port, key, self._handle_udp)
         self.tcp = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.tcp.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        self.tcp.bind((host, tcp_port))
-        self.tcp.listen(32)
-        self.tcp.settimeout(0.3)
+        try:
+            self.tcp.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            self.tcp.bind((host, tcp_port))
+            self.tcp.listen(32)
+            self.tcp.settimeout(0.3)
+            self.udp = ReliableUDP(host, udp_port, key, self._handle_udp)
+        except Exception:
+            self.tcp.close()
+            raise
+        self.roster_thread = threading.Thread(target=self._roster_loop, daemon=True)
+        self.roster_thread.start()
         self.accept_thread = threading.Thread(target=self._accept_loop, daemon=True)
         self.accept_thread.start()
         print(f"[server] TCP {self.tcp.getsockname()} | UDP {host}:{self.udp.port}")
@@ -46,74 +67,164 @@ class CollaborationServer:
         while self.running.is_set():
             try:
                 connection, address = self.tcp.accept()
-                threading.Thread(target=self._handle_connection,
-                                 args=(connection, address), daemon=True).start()
             except socket.timeout:
                 continue
             except OSError:
                 return
+            with self.connections_lock:
+                if not self.running.is_set() or len(self.connections) >= MAX_CONNECTIONS:
+                    connection.close()
+                    continue
+                worker = threading.Thread(target=self._handle_connection,
+                                          args=(connection, address), daemon=True)
+                self.connections[worker] = connection
+                worker.start()
 
     @staticmethod
     def _send_control(connection, data):
         connection.sendall((json.dumps(data, separators=(",", ":")) + "\n").encode("utf-8"))
 
     def _handle_connection(self, connection, address):
-        session = None
+        worker = threading.current_thread()
         try:
-            connection.settimeout(1.0)
-            raw = b""
-            last_seen = time.monotonic()
-            while self.running.is_set():
-                try:
-                    block = connection.recv(4096)
-                except socket.timeout:
-                    if time.monotonic() - last_seen > 12:
-                        break  # Client likely crashed or lost network.
-                    continue
-                if not block:
-                    break
-                last_seen = time.monotonic()
-                raw += block
-                if len(raw) > 8192:
-                    raise ValueError("Control message too long")
-                while b"\n" in raw:
-                    line, raw = raw.split(b"\n", 1)
-                    if not line:
-                        continue
-                    incoming = json.loads(line)
-                    if session is None:
-                        if incoming.get("type") != "LOGIN":
-                            raise ValueError("LOGIN is required first")
-                        session = self.registry.login(incoming.get("username"), address[0],
-                                                      incoming.get("udp_port"), connection)
-                        revision, names = self.registry.snapshot()
-                        self._send_control(connection, {"type": "LOGIN_OK", "token": session.token,
-                                                        "users": names, "version": revision,
-                                                        "udp_port": self.udp.port})
-                        self._publish_users()
-                        print(f"[server] {session.username} logged in from {session.udp_addr}")
-                    elif incoming.get("type") == "LOGOUT":
+            if self.tls_context is not None:
+                with self.connections_lock:
+                    if not self.running.is_set():
                         return
-                    elif incoming.get("type") != "PING":
-                        self._send_control(connection, {"type": "ERROR", "message": "Unknown control command"})
-        except (ValueError, TypeError, json.JSONDecodeError) as exc:
-            try:
-                self._send_control(connection, {"type": "ERROR", "message": str(exc)})
-            except OSError:
-                pass
+                    connection = self.tls_context.wrap_socket(
+                        connection, server_side=True, do_handshake_on_connect=False)
+                    self.connections[worker] = connection
+                connection.settimeout(4.0)
+                connection.do_handshake()
+            connection.settimeout(1.0)
+            self._serve_control(connection, address)
         except OSError:
             pass
         finally:
-            try:
-                connection.close()
-            except OSError:
-                pass
-            if session and self.registry.logout(session.username, session.token):
-                print(f"[server] {session.username} disconnected")
-                self._publish_users()
+            connection.close()
+            with self.connections_lock:
+                self.connections.pop(worker, None)
 
-    def _publish_users(self):
-        revision, online = self.registry.snapshot()
+    def _serve_control(self, connection, address):
+        session = None
+        hello_seen = False
+        legacy = False
+        raw = b""
+        last_seen = time.monotonic()
+        try:
+            while self.running.is_set():
+                if time.monotonic() - last_seen >= CONTROL_IDLE_SECONDS:
+                    return
+                if session is not None and self.clock() >= session.expires_at:
+                    self.registry.logout(session.username, session.token)
+                    self.roster_changed.set()
+                    session = None
+                    if legacy:
+                        return
+
+                end = raw.find(b"\n")
+                if (end == -1 and len(raw) > MAX_CONTROL_LINE) or end > MAX_CONTROL_LINE:
+                    raise ValueError("Control message too long")
+                if end == -1:
+                    try:
+                        block = connection.recv(4096)
+                    except socket.timeout:
+                        continue
+                    if not block:
+                        return
+                    raw += block
+                    continue
+                line, raw = raw[:end], raw[end + 1:]
+                incoming = json.loads(line.decode("utf-8"))
+                if not isinstance(incoming, dict) or not isinstance(incoming.get("type"), str):
+                    raise ValueError("Expected a JSON object with a type")
+                kind = incoming["type"]
+                last_seen = time.monotonic()
+                if not hello_seen and not legacy:
+                    if kind == "HELLO":
+                        version = incoming.get("version")
+                        if type(version) is not int:
+                            raise ValueError("HELLO requires an integer version")
+                        if version != PROTOCOL_VERSION:
+                            self._protocol_error(connection, "UNSUPPORTED_VERSION")
+                            return
+                        self._send_control(connection, {"type": "HELLO_OK", "version": PROTOCOL_VERSION})
+                        hello_seen = True
+                        continue
+                    if kind != "LOGIN" or self.accounts is not None:
+                        self._protocol_error(connection, "HELLO_REQUIRED")
+                        continue
+                    legacy = True
+
+                if kind == "LOGOUT":
+                    return
+                if session is None:
+                    if kind != "LOGIN":
+                        self._send_control(connection, {"type": "AUTH_REQUIRED"})
+                        continue
+                    try:
+                        session = self._login(connection, address[0], incoming)
+                    except ValueError as exc:
+                        self._send_control(connection, {"type": "ERROR", "code": "LOGIN_REJECTED",
+                                                        "message": str(exc)})
+                        if legacy:
+                            return
+                        continue
+                    if session is None:
+                        continue
+                    revision, names = self.registry.snapshot()
+                    self._send_control(connection, {"type": "LOGIN_OK", "token": session.token,
+                                                    "users": names, "version": revision,
+                                                    "udp_port": self.udp.port,
+                                                    "expires_in_seconds": math.ceil(max(
+                                                        0, session.expires_at - self.clock()))})
+                    self.roster_changed.set()
+                    print(f"[server] {session.username} logged in from {session.udp_addr}")
+                elif kind == "GET_USERS":
+                    revision, names = self.registry.snapshot()
+                    self._send_control(connection, {"type": "USERS", "users": names, "version": revision})
+                elif kind != "PING":
+                    self._protocol_error(connection, "UNEXPECTED_MESSAGE")
+        except (ValueError, RecursionError):
+            self._protocol_error(connection, "INVALID_MESSAGE")
+        finally:
+            if session and self.registry.logout(session.username, session.token):
+                self.roster_changed.set()
+                print(f"[server] {session.username} disconnected")
+
+    def _protocol_error(self, connection, code):
+        self._send_control(connection, {"type": "PROTOCOL_ERROR", "code": code})
+
+    def _login(self, connection, ip, incoming):
+        username = incoming.get("username")
+        port = incoming.get("udp_port")
+        if not isinstance(username, str) or not USERNAME.fullmatch(username):
+            raise ValueError("Username: 1-20 letters, digits or underscores")
+        if type(port) is not int or not 1 <= port <= 65535:
+            raise ValueError("Invalid UDP port")
+        if self.accounts is None:
+            if "password" in incoming:
+                raise ValueError("Password login requires the TLS account mode")
+        else:
+            failure = self.accounts.verify(username, incoming.get("password"))
+            if failure is not None:
+                self._send_control(connection, failure)
+                return None
+        return self.registry.login(username, ip, port, connection)
+
+    def _roster_loop(self):
+        sent_revision = -1
+        while self.running.is_set():
+            self.roster_changed.wait(timeout=0.25)
+            self.roster_changed.clear()
+            if not self.running.is_set():
+                return
+            revision, online = self.registry.snapshot()
+            if revision != sent_revision:
+                sent_revision = revision
+                self._publish_users(revision, online)
+
+    def _publish_users(self, revision, online):
         for session in self.registry.all_sessions():
             try:
                 self.udp.send(session.udp_addr, {"type": "USERS", "users": online,
@@ -188,12 +299,20 @@ class CollaborationServer:
 
     def close(self):
         self.running.clear()
+        self.roster_changed.set()
         self.tcp.close()
-        for session in self.registry.all_sessions():
+        with self.connections_lock:
+            connections = list(self.connections.items())
+        for _, connection in connections:
             try:
-                session.control_socket.shutdown(socket.SHUT_RDWR)
-                session.control_socket.close()
+                connection.shutdown(socket.SHUT_RDWR)
             except OSError:
                 pass
+            finally:
+                connection.close()
         self.udp.close()
         self.accept_thread.join(timeout=1.0)
+        self.roster_thread.join(timeout=1.0)
+        deadline = time.monotonic() + 2.0
+        for worker, _ in connections:
+            worker.join(timeout=max(0, deadline - time.monotonic()))
