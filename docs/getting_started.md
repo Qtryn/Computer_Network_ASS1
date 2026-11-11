@@ -29,17 +29,19 @@ key, sent privately outside the GitHub repository. Use only a test key.
 ```
 
 ```powershell
-.\.venv\Scripts\python.exe -m app.run_client --name alice --ui-port 8011
+.\.venv\Scripts\python.exe -m app.run_client --ui-port 8011
 ```
 
 ```powershell
-.\.venv\Scripts\python.exe -m app.run_client --name bob --ui-port 8012
+.\.venv\Scripts\python.exe -m app.run_client --ui-port 8012
 ```
 
 Alice UI: http://127.0.0.1:8011  
 Bob UI: http://127.0.0.1:8012
 
-Send a private message, broadcast to everyone, and send a binary file.
+Log in with a unique username on each page. Then send a private message,
+broadcast to everyone, and send a binary file. For a terminal-preauthenticated
+client, the optional `--name alice` argument is still supported.
 Received file: `downloads/bob/`.
 
 ## 4. LAN demo
@@ -53,11 +55,11 @@ python -m app.run_server --host 0.0.0.0
 On each client PC, replace `SERVER_IP` with the actual server LAN IP:
 
 ```powershell
-python -m app.run_client --name alice --host SERVER_IP --ui-port 8011
+python -m app.run_client --host SERVER_IP --ui-port 8011
 ```
 
-Use a unique username on each client. Local UI port numbers only need to be
-unique for processes running on the **same machine**. Allow private-network
+Log in with a unique username in each browser. Local UI port numbers only need
+to be unique for processes running on the **same machine**. Allow private-network
 TCP 9100 and UDP 9101 on the server firewall. Every browser connects to its
 **own** 127.0.0.1 UI; it is never accessed remotely.
 

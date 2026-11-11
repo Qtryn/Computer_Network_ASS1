@@ -79,7 +79,9 @@ class CollaborationClient:
     def _emit(self, event):
         with self.event_lock:
             self.event_id += 1
-            self.events.append({"id": self.event_id, **event})
+            emitted = {"id": self.event_id, **event}
+            self.events.append(emitted)
+            return emitted.copy()
 
     def get_state(self, after_id=0):
         with self.event_lock:
@@ -91,7 +93,7 @@ class CollaborationClient:
     def send_chat(self, recipient, text):
         event = ChatService.build_message(self.username, recipient, text)
         self.udp.send(self.server_udp, {**event, "token": self.token}, CHAT_STREAM)
-        self._emit({**event, "outgoing": True})
+        return self._emit({**event, "outgoing": True})
 
     def send_file(self, path, recipient, display_name=None):
         """Blocking transfer; call in a background thread from HTTP/UI."""
@@ -126,6 +128,8 @@ class CollaborationClient:
                 self.online = sorted(message.get("users", []))
             self._emit({"type": "USERS", "users": list(self.online)})
         elif kind in ("CHAT", "ERROR", "FILE_RECEIPT"):
+            if kind == "CHAT" and message.get("sender") == self.username:
+                return
             self._emit(message)
         elif kind in ("FILE_START", "FILE_CHUNK", "FILE_END"):
             file_id = message.get("file_id")
