@@ -18,6 +18,9 @@
     .event { padding: 5px 3px; border-bottom: 1px solid #eee; font-size: 14px; overflow-wrap: anywhere; }
     .muted { color: #666; }
     .error { color: #b42318; }
+    .status-error { color: #b42318; }
+    #login-panel { max-width: 420px; }
+    .session-line { justify-content: space-between; }
     progress { width: 220px; vertical-align: middle; }
     footer { color: #666; font-size: 12px; margin-top: 15px; }
   </style>
@@ -25,7 +28,20 @@
 <body>
 <main>
   <h1>Collaboration App — Local Demo</h1>
-  <p id="status" class="muted">Connecting...</p>
+  <section id="login-panel" hidden>
+    <p>Enter your username to connect to the collaboration server.</p>
+    <form id="login-form" class="line">
+      <label for="username">Username</label>
+      <input id="username" type="text" maxlength="20" autocomplete="username" required>
+      <button type="submit">Log in</button>
+    </form>
+    <p id="login-status" class="muted" aria-live="polite">Connect to the server to begin.</p>
+  </section>
+  <section id="app-panel" hidden>
+  <div class="line session-line">
+    <p id="status" class="muted" aria-live="polite">Connecting...</p>
+    <button id="logout-button" type="button">Log out</button>
+  </div>
   <div class="line"><b>Online users:</b> <span id="online">...</span></div>
   <div class="line">
     <label for="recipient">Send to</label>
@@ -42,9 +58,13 @@
   </form>
   <div class="line"><span>Last transfer:</span><progress id="progress" value="0" max="100"></progress><span id="progress-label">0%</span></div>
   <footer>Plain browser JS + local Python HTTP. Chat and files are sent over encrypted UDP from the Python client.</footer>
+  </section>
 </main>
 <script>
   let cursor = 0;
+  let loginError = '';
+  let forceLogin = false;
+  const renderedChatEvents = new Set();
   const $ = (id) => document.getElementById(id);
   function addLine(text, isError = false) {
     const line = document.createElement('div');
@@ -54,49 +74,152 @@
     $('feed').scrollTop = $('feed').scrollHeight;
     if ($('feed').children.length > 250) $('feed').firstChild.remove();
   }
+  function showChat(eventId, chat) {
+    if (renderedChatEvents.has(eventId)) return;
+    renderedChatEvents.add(eventId);
+    if (renderedChatEvents.size > 500) {
+      renderedChatEvents.delete(renderedChatEvents.values().next().value);
+    }
+    addLine('[' + chat.sender + ' → ' +
+      (chat.recipient === '*' ? 'everyone' : chat.recipient) + '] ' + chat.text);
+  }
   async function api(path, options) {
     const response = await fetch(path, options);
     const data = await response.json();
     if (!response.ok) throw new Error(data.error || 'Request failed');
     return data;
   }
+  function setConnectionState(isConnected, username = '') {
+    $('status').className = isConnected ? 'muted' : 'status-error';
+    $('status').textContent = isConnected
+      ? 'User: ' + username + ' | Connected'
+      : 'Local client unavailable. Restart the client; reconnecting automatically...';
+    $('online').textContent = isConnected ? $('online').textContent : '(unavailable)';
+    if (!isConnected) {
+      $('recipient').replaceChildren(new Option('Everyone (broadcast)', '*'));
+      $('online').textContent = '(unavailable)';
+    }
+    for (const control of document.querySelectorAll(
+      '#recipient, #message, #chat-form button, #file, #file-form button'
+    )) control.disabled = !isConnected;
+  }
   async function refresh() {
     try {
       const data = await api('/api/state?after=' + cursor);
-      $('status').textContent = 'User: ' + data.username + (data.connected ? ' | Connected' : ' | Disconnected');
+      if (forceLogin) {
+        $('app-panel').hidden = true;
+        $('login-panel').hidden = false;
+        return;
+      }
+      if (!data.authenticated || !data.connected) {
+        $('login-panel').hidden = true;
+        $('app-panel').hidden = true;
+        $('login-panel').hidden = false;
+        $('login-status').className = data.authenticated || loginError ? 'status-error' : 'muted';
+        $('login-status').textContent = data.authenticated
+          ? 'Disconnected from the collaboration server. Log in again to reconnect.'
+          : loginError || 'Connect to the collaboration server to begin.';
+        return;
+      }
+      $('login-panel').hidden = true;
+      $('app-panel').hidden = false;
+      setConnectionState(data.connected, data.username);
       $('online').textContent = data.online.join(', ') || '(none)';
       const current = $('recipient').value;
       const recipients = data.online.filter(user => user !== data.username);
       $('recipient').replaceChildren(new Option('Everyone (broadcast)', '*'));
       for (const user of recipients) $('recipient').add(new Option(user, user));
       $('recipient').value = (current === '*' || recipients.includes(current)) ? current : '*';
+      $('recipient').disabled = false;
       for (const event of data.events) {
         if (event.id <= cursor) continue;
         cursor = event.id;
         if (event.type === 'CHAT') {
-          addLine('[' + event.sender + ' → ' + (event.recipient === '*' ? 'everyone' : event.recipient) + '] ' + event.text);
+          showChat(event.id, event);
         } else if (event.type === 'ERROR') {
           addLine('ERROR: ' + event.message, true);
         } else if (event.type === 'FILE_COMPLETE') {
           addLine('File received and SHA-256 verified: ' + event.path);
+          $('progress').value = 100;
+          $('progress-label').textContent = 'Received; SHA-256 verified';
         } else if (event.type === 'FILE_RECEIPT') {
           addLine('Receiver ' + event.sender + ': ' + event.status + ' (' + event.message + ')');
+          $('progress-label').textContent = event.status === 'ok'
+            ? 'Recipient verified SHA-256'
+            : 'Recipient reported failure: ' + event.message;
         } else if (event.type === 'UPLOAD_SENT') {
           addLine('Server acknowledged all file chunks; waiting for recipient');
+          $('progress-label').textContent = 'Server received all chunks; recipient verification pending';
         } else if (event.type === 'INFO') {
           addLine(event.message);
-        } else if (event.type === 'FILE_PROGRESS' || event.type === 'UPLOAD_PROGRESS') {
+        } else if (event.type === 'FILE_PROGRESS') {
           $('progress').value = event.percent;
-          $('progress-label').textContent = event.percent + '%';
+          $('progress-label').textContent = 'Receiving from ' + (event.sender || 'peer') + ': ' + event.percent + '%';
+        } else if (event.type === 'UPLOAD_PROGRESS') {
+          $('progress').value = event.percent;
+          $('progress-label').textContent = 'Sending to server: ' + event.percent +
+            '% (transport ACK; recipient verification pending)';
         }
       }
-    } catch (err) { $('status').textContent = 'UI error: ' + err.message; }
+    } catch (err) {
+      $('app-panel').hidden = true;
+      $('login-panel').hidden = false;
+      $('login-status').className = 'status-error';
+      $('login-status').textContent = 'Local UI connection failed: ' + err.message;
+    }
   }
+  $('login-form').addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const button = $('login-form').querySelector('button');
+    button.disabled = true;
+    loginError = '';
+    $('login-status').className = 'muted';
+    $('login-status').textContent = 'Connecting...';
+    try {
+      await api('/api/login', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({username:$('username').value.trim()})
+      });
+      forceLogin = false;
+      loginError = '';
+      cursor = 0;
+      renderedChatEvents.clear();
+      $('feed').replaceChildren();
+      await refresh();
+    } catch (err) {
+      loginError = 'Login failed: ' + err.message;
+      $('login-status').className = 'status-error';
+      $('login-status').textContent = loginError;
+    } finally {
+      button.disabled = false;
+    }
+  });
+  $('logout-button').addEventListener('click', async () => {
+    $('logout-button').disabled = true;
+    try {
+      await api('/api/logout', {method:'POST'});
+      forceLogin = true;
+      cursor = 0;
+      loginError = '';
+      renderedChatEvents.clear();
+      $('feed').replaceChildren();
+      $('username').value = '';
+      $('login-panel').hidden = false;
+      $('app-panel').hidden = true;
+      $('login-status').className = 'muted';
+      $('login-status').textContent = 'Logged out. Enter a username to connect again.';
+    } catch (err) {
+      addLine('Logout failed: ' + err.message, true);
+    } finally {
+      $('logout-button').disabled = false;
+    }
+  });
   $('chat-form').addEventListener('submit', async (event) => {
     event.preventDefault();
     try {
-      await api('/api/chat', {method:'POST', headers:{'Content-Type':'application/json'},
+      const result = await api('/api/chat', {method:'POST', headers:{'Content-Type':'application/json'},
         body:JSON.stringify({recipient:$('recipient').value, text:$('message').value})});
+      showChat(result.event_id, result.chat);
       $('message').value = '';
       await refresh();
     } catch (err) { addLine('Send failed: ' + err.message, true); }

@@ -51,10 +51,20 @@ belong to Member 1/Member 2/Member 4. If a shared API must change, open a team r
 **Current runnable baseline:** local HTTP service and HTML/JS UI; send chat/file,
 active users and progress display.
 
-- [ ] Test browser on Windows and Linux (especially uploading Unicode filenames).
-- [ ] Make errors and disconnected status clear; retry connection if approved.
-- [ ] Ensure progress bars do not confuse sender ACK with receiver success.
-- [ ] Check layout/usability and capture demonstration screenshots.
+- [x] Test browser on Windows and Ubuntu Linux, including uploading files with
+  Vietnamese filenames; Linux evidence is in `docs/evidence/linux/`.
+- [x] Show a clear local-client-unavailable state, clear stale users and disable
+  sending controls; the UI polling restores them when the client is available again.
+- [x] Distinguish sender-to-server transport ACK progress from recipient receipt
+  and SHA-256 verification in the progress label.
+- [x] Keep sent chat visible in the sender's feed and avoid duplicate broadcast
+  echoes.
+- [x] Add a browser login form and connect the client to the collaboration
+  server from the UI; retain `--name` as an optional pre-login mode.
+- [x] Add a logout action that closes the client session and returns to login.
+- [x] Review layout/usability from Windows demo screenshots.
+- [x] Capture demonstration screenshots in `docs/evidence/member4/` and
+  `docs/evidence/linux/`.
 - [ ] Confirm local HTTP + JS is an acceptable interpretation of rubric step 9.
 - [ ] Coordinate any changes to the `CollaborationClient` API with Member 3.
 

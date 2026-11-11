@@ -56,16 +56,18 @@ python -m app.run_server
 ```
 
 ```powershell
-python -m app.run_client --name alice --ui-port 8011
+python -m app.run_client --ui-port 8011
 ```
 
 ```powershell
-python -m app.run_client --name bob --ui-port 8012
+python -m app.run_client --ui-port 8012
 ```
 
 Open `http://127.0.0.1:8011` (Alice) and `http://127.0.0.1:8012` (Bob).
-Select Bob, send a private message or a file, and inspect `downloads/bob/`.
-For broadcast chat select **Everyone**. Use Ctrl+C to stop each process.
+Log in with a unique username on each page, then select a recipient and send a
+private message or file. Inspect received files in `downloads/<username>/`.
+For broadcast chat select **Everyone**. Use **Log out** to end a client session;
+use Ctrl+C to stop the local UI process.
 
 TCP port: **9100**; UDP port: **9101**. See `docs/getting_started.md`
 for localhost, LAN, and troubleshooting notes.
