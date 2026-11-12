@@ -6,6 +6,7 @@ import hashlib
 import hmac
 import json
 import math
+import os
 import re
 import secrets
 import tempfile
@@ -47,7 +48,8 @@ class Account:
 
 
 class PasswordAccounts:
-    def __init__(self, records, *, max_attempts=3, lock_seconds=60, clock=time.monotonic):
+    def __init__(self, records, *, max_attempts=3, lock_seconds=60, clock=time.monotonic,
+                 path=None):
         if max_attempts < 1 or lock_seconds <= 0:
             raise ValueError("Login limits must be positive")
         self.accounts = {name: Account(bytes.fromhex(record["salt"]), bytes.fromhex(record["hash"]))
@@ -56,12 +58,49 @@ class PasswordAccounts:
         self.max_attempts = max_attempts
         self.lock_seconds = lock_seconds
         self.clock = clock
+        self.path = Path(path) if path is not None else None
+        self.records = {name: dict(record) for name, record in records.items()}
+        self.store_lock = threading.Lock()
+
+    def register(self, username, password):
+        if self.path is None:
+            raise ValueError("Registration requires a persistent account file")
+        if not isinstance(username, str) or not USERNAME.fullmatch(username):
+            raise ValueError("Username: 1-20 letters, digits or underscores")
+        if not isinstance(password, str) or not 8 <= len(password) <= 128 or not password.strip():
+            raise ValueError("Password must contain 8-128 characters and not be blank")
+        salt = secrets.token_bytes(16)
+        digest = hash_password(password, salt)
+        with self.store_lock:
+            if username in self.accounts:
+                raise ValueError("Username already exists")
+            records = {**self.records, username: {"salt": salt.hex(), "hash": digest.hex()}}
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", dir=self.path.parent,
+                                             prefix=".accounts-", delete=False) as out:
+                temporary = Path(out.name)
+                try:
+                    json.dump(records, out, indent=2)
+                    out.write("\n")
+                    out.flush()
+                    os.fsync(out.fileno())
+                except Exception:
+                    out.close()
+                    temporary.unlink(missing_ok=True)
+                    raise
+            try:
+                temporary.replace(self.path)
+            finally:
+                temporary.unlink(missing_ok=True)
+            self.records = records
+            self.accounts[username] = Account(salt, digest)
 
     def verify(self, username, password):
         """Return a failure response or None on successful verification."""
         if not isinstance(password, str) or not password:
             raise ValueError("A password is required")
-        account = self.accounts.get(username)
+        with self.store_lock:
+            account = self.accounts.get(username)
         state = account if account is not None else self.unknown_account
         with state.lock:
             now = self.clock()

@@ -17,7 +17,8 @@ async function main() {
   const elements = Object.fromEntries([...html.matchAll(/id="([^"]+)"/g)].map(m => [m[1], new Element()]));
   elements['chat-form'].elements = [elements.message, new Element()];
   elements['file-form'].elements = [elements.file, new Element()];
-  let state = {username:'alice', connected:false, account_mode:true, online:[], events:[], last_id:0, session_id:null};
+  let state = {username:'alice', connected:false, account_mode:true, registration_enabled:true,
+    online:[], events:[], outbox:[], last_id:0, session_id:null};
   let failLogin = false;
   let deferred = null;
   const requests = [];
@@ -42,6 +43,12 @@ async function main() {
   assert.equal(elements.password.hidden, false);
   assert.equal(elements['login-form'].hidden, false);
   assert.equal(elements.message.disabled, true);
+  assert.equal(elements.register.hidden, false);
+  elements.password.value = 'registration-secret';
+  await elements.register.handlers.click();
+  assert.equal(elements.password.value, '');
+  assert.match(elements.status.textContent, /Account created/);
+  assert(requests.some(r => r.url === '/api/register'));
   elements.password.value = 'typing-password';
   await vm.runInContext('refresh()', context);
   assert.equal(elements.password.value, 'typing-password', 'polling must preserve a password being typed');
@@ -63,6 +70,28 @@ async function main() {
   state.last_id = 2;
   await vm.runInContext('refresh()', context);
   assert(elements.feed.children.some(line => line.textContent.includes('old history')));
+  state.events.push({id:3, type:'CHAT', sender:'alice', recipient:'bob', text:'one outgoing',
+    outgoing:true, message_id:'stable-id', delivery:'PENDING'});
+  state.outbox = [{type:'CHAT', sender:'alice', recipient:'bob', text:'one outgoing',
+    message_id:'stable-id', status:'SENDING'}];
+  state.last_id = 3;
+  await vm.runInContext('refresh()', context);
+  assert.equal(elements.feed.children.filter(line => line.textContent.includes('one outgoing')).length, 1);
+  state.events.push({id:4, type:'CHAT_RECEIPT', message_id:'stable-id', status:'DELIVERED'});
+  state.events.push({id:5, type:'CHAT_STATUS', message_id:'stable-id', status:'SENDING'});
+  state.outbox = [];
+  state.last_id = 5;
+  await vm.runInContext('refresh()', context);
+  assert(elements.feed.children.find(line => line.textContent.includes('one outgoing')).textContent.includes('DELIVERED'));
+  state.events.push({id:6, type:'UPLOAD_PROGRESS', percent:75});
+  state.last_id = 6;
+  await vm.runInContext('refresh()', context);
+  assert.match(elements['progress-label'].textContent, /transport ACK; recipient verification pending/);
+  state.events.push({id:7, type:'FILE_COMPLETE', path:'Báo cáo.txt'});
+  state.last_id = 7;
+  await vm.runInContext('refresh()', context);
+  assert.equal(elements.progress.value, 100);
+  assert.equal(elements['progress-label'].textContent, 'Received; SHA-256 verified');
   elements.progress.value = 85;
   elements.recipient.value = 'bob';
   await elements.logout.handlers.click();
@@ -87,7 +116,7 @@ async function main() {
   assert.match(html, /id="password" type="password"/);
   assert(!/localStorage|sessionStorage/.test(html));
   assert(requests.some(r => r.url === '/api/login'));
-  console.log('PASS: UI script login/error, password clearing, polling, logout reset, relogin and stale-response guards (DOM double; no browser)');
+  console.log('PASS: registration/login, password clearing, progress labels, stable-ID chat dedup/status, logout/relogin and stale-response guards (DOM double; no browser)');
 }
 
 main().catch(error => { console.error(error); process.exitCode = 1; });

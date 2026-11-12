@@ -11,8 +11,10 @@ import socket
 import ssl
 import tempfile
 import threading
+import time
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlsplit
+from app.server.auth import USERNAME
 
 HTML_PATH = Path(__file__).parent / "static" / "index.html"
 MAX_HEADERS = 16 * 1024
@@ -21,15 +23,46 @@ MAX_CHAT_REQUEST = 4096
 
 class ClientSession:
     """Keep the local HTTP listener alive across network login/logout."""
-    def __init__(self, factory, *, client=None, account_mode=False, username=""):
+    def __init__(self, factory, *, client=None, account_mode=False, username="",
+                 registration_factory=None, auto_reconnect=False):
         self.factory = factory
         self.client = client
         self.account_mode = account_mode
         self.username = username
         self.lock = threading.Lock()
+        self.registration_factory = registration_factory
+        self.chat_states = {}
+        if client is not None and hasattr(client, "chat_state"):
+            self.chat_states[client.username] = client.chat_state
+        self.reconnect_user = client.username if client else None
+        self.reconnect_error = ""
+        self.next_retry = 0
+        self.retry_delay = 1
+        self.stop = threading.Event()
+        self.reconnect_thread = None
+        if auto_reconnect:
+            self.reconnect_thread = threading.Thread(target=self._reconnect_loop, daemon=True)
+            self.reconnect_thread.start()
+
+    def _connect(self, username, password):
+        client = self.factory(username, password)
+        if hasattr(client, "chat_state"):
+            state = self.chat_states.setdefault(username, client.chat_state)
+            if state.username != username:
+                client.close()
+                raise ValueError("Outbox identity mismatch")
+            client.chat_state = state
+            client.outbox_wakeup.set()
+        self.client = client
+        self.reconnect_user = username
+        self.username = username
+        self.reconnect_error = ""
+        self.retry_delay = 1
 
     def login(self, username, password=None):
         with self.lock:
+            if not isinstance(username, str) or not USERNAME.fullmatch(username):
+                raise ValueError("Username: 1-20 letters, digits or underscores")
             if self.client and self.client.running.is_set():
                 raise ValueError("Already logged in; log out first")
             if self.client:
@@ -39,13 +72,45 @@ class ClientSession:
                 raise ValueError("Password is required in account mode")
             if not self.account_mode and password:
                 raise ValueError("Demo mode does not use passwords")
-            self.client = self.factory(username, password if self.account_mode else None)
+            self.reconnect_user = None
+            self._connect(username, password if self.account_mode else None)
+
+    def register(self, username, password):
+        if not self.account_mode or self.registration_factory is None:
+            raise ValueError("Registration requires TLS account mode")
+        self.registration_factory(username, password)
 
     def logout(self):
         with self.lock:
+            self.reconnect_user = None  # Explicit logout must never auto-login.
             if self.client:
                 self.client.close()
                 self.client = None
+
+    def close(self):
+        self.stop.set()
+        self.logout()
+        if self.reconnect_thread:
+            self.reconnect_thread.join(timeout=5)
+
+    def _reconnect_loop(self):
+        while not self.stop.wait(0.2):
+            with self.lock:
+                # Accounts require fresh user-entered credentials; none are saved.
+                if (self.account_mode or not self.reconnect_user or
+                        (self.client and getattr(self.client, "disconnect_kind", None) == "expired") or
+                        (self.client and self.client.running.is_set()) or time.monotonic() < self.next_retry):
+                    continue
+                name = self.reconnect_user
+                if self.client:
+                    self.client.close()
+                    self.client = None
+                try:
+                    self._connect(name, None)
+                except (OSError, ValueError, RuntimeError) as exc:
+                    self.reconnect_error = str(exc)
+                    self.next_retry = time.monotonic() + self.retry_delay
+                    self.retry_delay = min(8, self.retry_delay * 2)
 
     def active_client(self):
         with self.lock:
@@ -59,7 +124,13 @@ class ClientSession:
             state = self.client.get_state(after_id) if self.client else {
                 "username": self.username, "connected": False, "online": [],
                 "events": [], "last_id": 0, "session_id": None}
-        return {**state, "account_mode": self.account_mode}
+            expired = self.client and getattr(self.client, "disconnect_kind", None) == "expired"
+            reauth = bool((self.account_mode or expired) and self.reconnect_user and not state["connected"])
+            retry = bool(not reauth and self.reconnect_user and not state["connected"])
+        return {**state, "account_mode": self.account_mode,
+                "registration_enabled": self.account_mode and self.registration_factory is not None,
+                "reauth_required": reauth, "reconnecting": retry,
+                "reconnect_error": self.reconnect_error}
 
 
 def send_response(connection, status, content, content_type="application/json; charset=utf-8"):
@@ -138,14 +209,14 @@ def handle_request(connection, client):
         if method == "GET" and url.path == "/api/state":
             after = int(parse_qs(url.query).get("after", ["0"])[0])
             return send_response(connection, 200, client.get_state(after))
-        if method != "POST" or url.path not in ("/api/chat", "/api/file", "/api/login", "/api/logout"):
+        if method != "POST" or url.path not in ("/api/chat", "/api/file", "/api/login", "/api/logout", "/api/register"):
             return send_response(connection, 404, {"error": "Endpoint not found"})
 
         size = int(headers.get("content-length", "-1"))
         if size < 0:
             raise ValueError("Content-Length is required")
 
-        if url.path in ("/api/login", "/api/logout"):
+        if url.path in ("/api/login", "/api/logout", "/api/register"):
             if size > MAX_CHAT_REQUEST:
                 raise ValueError("Login request too large")
             body = read_body(connection, first_bytes, size)
@@ -155,7 +226,12 @@ def handle_request(connection, client):
                 if client.account_mode and not isinstance(connection, ssl.SSLSocket):
                     raise ValueError("Account login requires local HTTPS")
                 credentials = json.loads(body)
-                client.login(credentials["username"], credentials.get("password"))
+                if not isinstance(credentials, dict):
+                    raise ValueError("Login body must be a JSON object")
+                if url.path == "/api/register":
+                    client.register(credentials.get("username"), credentials.get("password"))
+                else:
+                    client.login(credentials.get("username"), credentials.get("password"))
             return send_response(connection, 200, {"ok": True})
 
         if isinstance(client, ClientSession):

@@ -37,7 +37,8 @@ flowchart TB
 
 - UDP data path is kept distinct from the TCP control path to satisfy contradictory
   statements in the assignment without pretending TCP transfer fulfills UDP rubric.
-- One UDP stream per file (UUID), one shared chat/control stream per peer. This keeps
+- One UDP stream per file (UUID), one chat/control stream per authenticated session,
+  plus an independent application-ACK stream. This keeps
   chat and file delivery state separate. Each stream has an ordered delivery queue.
 - UI communicates only with a **local** Python process: browsers cannot directly
   send the raw UDP packets used by this project.

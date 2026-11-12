@@ -9,12 +9,15 @@ import socket
 import threading
 import time
 import uuid
+from collections import OrderedDict
 
 from app.common.config import PROTOCOL_VERSION
+from app.common.protocol import session_stream
 from app.server.auth import USERNAME
 from app.server.registry import UserRegistry
 from app.transport.reliable_udp import CHAT_STREAM, ReliableUDP
 from app.features.chat import ChatService
+from app.features.outbox import chat_digest
 
 FILE_TYPES = {"FILE_START", "FILE_CHUNK", "FILE_END"}
 MAX_CONTROL_LINE = 4096
@@ -43,6 +46,8 @@ class CollaborationServer:
         self.transfer_activity = {}
         self.transfer_sessions = {}
         self.transfer_timeout = transfer_timeout
+        self.chat_lock = threading.Lock()
+        self.chat_deliveries = OrderedDict()  # (sender, message_id) -> routing/ACK state
         self.tcp = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         try:
             self.tcp.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -163,6 +168,15 @@ class CollaborationServer:
                 if kind == "LOGOUT":
                     return
                 if session is None:
+                    if kind == "REGISTER":
+                        try:
+                            if self.accounts is None or self.tls_context is None:
+                                raise ValueError("Registration requires TLS account mode")
+                            self.accounts.register(incoming.get("username"), incoming.get("password"))
+                            self._send_control(connection, {"type": "REGISTER_OK"})
+                        except (ValueError, OSError) as exc:
+                            self._send_control(connection, {"type": "ERROR", "message": str(exc)})
+                        return
                     if kind != "LOGIN":
                         self._send_control(connection, {"type": "AUTH_REQUIRED"})
                         continue
@@ -178,6 +192,7 @@ class CollaborationServer:
                         continue
                     revision, names = self.registry.snapshot()
                     self._send_control(connection, {"type": "LOGIN_OK", "token": session.token,
+                                                    "chat_stream": str(session.chat_stream),
                                                     "users": names, "version": revision,
                                                     "udp_port": self.udp.port,
                                                     "expires_in_seconds": math.ceil(max(
@@ -233,7 +248,7 @@ class CollaborationServer:
         for session in self.registry.all_sessions():
             try:
                 self.udp.send(session.udp_addr, {"type": "USERS", "users": online,
-                                                      "version": revision}, CHAT_STREAM)
+                                                      "version": revision}, session.chat_stream)
             except (TimeoutError, OSError, ConnectionError):
                 pass
 
@@ -242,7 +257,7 @@ class CollaborationServer:
         if session:
             try:
                 self.udp.send(session.udp_addr,
-                              {"type": "ERROR", "message": str(message)}, CHAT_STREAM)
+                              {"type": "ERROR", "message": str(message)}, session.chat_stream)
             except (TimeoutError, OSError, ConnectionError):
                 pass
 
@@ -250,7 +265,7 @@ class CollaborationServer:
         session = self.registry.get(recipient)
         if not session:
             raise ValueError(f"User '{recipient}' is offline")
-        self.udp.send(session.udp_addr, message, stream)
+        self.udp.send(session.udp_addr, message, session.chat_stream if stream == CHAT_STREAM else stream)
 
     def _transfer_stale(self, file_id, users):
         sessions = [self.registry.get(name) for name in users]
@@ -292,6 +307,11 @@ class CollaborationServer:
             return  # Ignore UDP datagrams from unknown/unauthenticated sessions.
         try:
             if kind == "CHAT":
+                if message.get("message_id"):
+                    if stream != session.chat_stream:
+                        raise ValueError("Chat session stream mismatch")
+                    self._route_chat(username, message)
+                    return
                 recipients = ChatService.recipients(username, message.get("recipient"),
                                                     self.registry.names())
                 clean = ChatService.build_message(username, message["recipient"], message["text"])
@@ -300,6 +320,16 @@ class CollaborationServer:
                 self._forward(username, CHAT_STREAM, {
                     "type": "CHAT_RECEIPT", "message": "Recipient transport acknowledged chat",
                     "recipients": recipients})
+            elif kind == "CHAT_ACK":
+                if stream != session_stream(session.token, "ack"):
+                    raise ValueError("Chat ACK session stream mismatch")
+                key = (message.get("original_sender"), message.get("message_id"))
+                with self.chat_lock:
+                    delivery = self.chat_deliveries.get(key)
+                    if delivery is None or username not in delivery["targets"]:
+                        raise ValueError("Invalid chat application acknowledgement")
+                    delivery["acked"].add(username)
+                self._chat_receipt(key)
             elif kind in FILE_TYPES:
                 file_id = str(message.get("file_id", ""))
                 stream_id = uuid.UUID(file_id)
@@ -354,6 +384,57 @@ class CollaborationServer:
                 if owned:
                     self._abort_transfer(file_id, f"File relay failed: {exc}")
             self._send_error(username, exc)
+
+    def _chat_receipt(self, key):
+        with self.chat_lock:
+            delivery = self.chat_deliveries.get(key)
+            if delivery is None:
+                return
+            targets = delivery["targets"]
+            status = "DELIVERED" if set(targets) <= delivery["acked"] else "PENDING"
+        try:
+            self._forward(key[0], CHAT_STREAM, {
+                "type": "CHAT_RECEIPT", "message_id": key[1], "status": status,
+                "recipients": targets,
+                "message": "Recipient application acknowledged" if status == "DELIVERED"
+                           else "Waiting for recipient application acknowledgement"})
+        except (ValueError, OSError, TimeoutError, ConnectionError):
+            pass  # Sender replays its stable message ID after reconnecting.
+
+    def _route_chat(self, username, message):
+        message_id = str(uuid.UUID(message["message_id"]))
+        recipient, targets = message.get("recipient"), message.get("targets")
+        if (not isinstance(targets, list) or len(targets) > MAX_CONNECTIONS or
+                any(not isinstance(name, str) or not USERNAME.fullmatch(name) for name in targets)
+                or len(set(targets)) != len(targets)):
+            raise ValueError("Invalid chat targets")
+        if recipient != "*" and targets != [recipient]:
+            raise ValueError("Private chat target mismatch")
+        if recipient == "*" and username in targets:
+            raise ValueError("Broadcast must exclude sender")
+        clean = ChatService.build_message(username, recipient, message.get("text"),
+                                          message_id=message_id, targets=targets)
+        key = (username, message_id)
+        with self.chat_lock:
+            delivery = self.chat_deliveries.get(key)
+            if delivery is not None and chat_digest(clean) != chat_digest(delivery["message"]):
+                raise ValueError("Message ID reused with different content")
+            if delivery is None:
+                if len(self.chat_deliveries) >= 5000:
+                    completed = next((k for k, d in self.chat_deliveries.items()
+                                      if set(d["targets"]) <= d["acked"]), None)
+                    if completed is None:
+                        raise ValueError("Server pending chat limit reached")
+                    del self.chat_deliveries[completed]
+                delivery = {"message": clean, "targets": targets, "acked": set()}
+                self.chat_deliveries[key] = delivery
+            remaining = [name for name in targets if name not in delivery["acked"]]
+        for target in remaining:
+            try:
+                self._forward(target, CHAT_STREAM, clean)
+            except (ValueError, OSError, TimeoutError, ConnectionError) as exc:
+                self._send_error(username, f"Chat remains pending: {exc}")
+        self._chat_receipt(key)
 
     def close(self):
         self.running.clear()

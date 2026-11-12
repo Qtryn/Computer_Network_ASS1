@@ -2,7 +2,8 @@
 import argparse
 import ssl
 
-from app.client import CollaborationClient
+from app.client import CollaborationClient, register_account
+from app.features.outbox import ChatState
 from app.common.config import TCP_PORT, UDP_PORT
 from app.web.local_web import ClientSession, run_local_ui
 from app.security.crypto import load_key
@@ -35,15 +36,21 @@ def main():
     def connect(username, password):
         return CollaborationClient(username, args.host, args.tcp_port, args.udp_port, key,
                                    password=password, tls_context=context,
-                                   server_hostname=args.server_name)
+                                   server_hostname=args.server_name,
+                                   chat_state=client.chat_states.setdefault(username, ChatState(username)))
 
-    client = ClientSession(connect, account_mode=context is not None, username=args.name)
+    def register(username, password):
+        register_account(username, password, args.host, args.tcp_port,
+                         tls_context=context, server_hostname=args.server_name)
+
+    client = ClientSession(connect, account_mode=context is not None, username=args.name,
+                           registration_factory=register, auto_reconnect=True)
     try:
         run_local_ui(client, args.ui_port, tls_context=ui_context)
     except KeyboardInterrupt:
         print("\nStopping client...")
     finally:
-        client.logout()
+        client.close()
 
 
 if __name__ == "__main__":

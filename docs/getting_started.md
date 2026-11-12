@@ -45,6 +45,9 @@ Received file: `downloads/bob/`.
 Logout clears the local session and leaves the page available for another login.
 For password accounts, verified server TLS and local HTTPS, use the account-mode
 commands and certificate setup in `README.md`.
+Account mode also provides Register in the HTTPS login form; CLI provisioning is
+optional. After server loss, log in again with the same account to resume its
+pending RAM outbox. Demo mode reconnects automatically; explicit logout stops it.
 
 ## 4. LAN demo
 

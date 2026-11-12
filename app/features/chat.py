@@ -6,7 +6,7 @@ from app.security.crypto import OVERHEAD
 
 class ChatService:
     @staticmethod
-    def build_message(sender, recipient, text):
+    def build_message(sender, recipient, text, *, message_id=None, targets=None):
         """Recipient '*' means broadcast; otherwise a private username."""
         if not isinstance(text, str) or not text.strip():
             raise ValueError("Cannot send an empty message")
@@ -15,6 +15,10 @@ class ChatService:
         if not isinstance(recipient, str) or not recipient.strip():
             raise ValueError("Recipient is required")
         message = {"type": "CHAT", "sender": sender, "recipient": recipient, "text": text}
+        if message_id is not None:
+            message["message_id"] = message_id
+        if targets is not None:
+            message["targets"] = targets
         # The client adds a 48-character token (registry's token_hex(24)).
         # Encode it too so JSON escaping and all metadata count toward the limit.
         encoded = encode_message({**message, "token": "0" * 48})

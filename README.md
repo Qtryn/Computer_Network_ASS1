@@ -73,8 +73,15 @@ for localhost, LAN, and troubleshooting notes.
 
 ### Password accounts and verified TLS (localhost)
 
-Provision accounts once; the CLI prompts for passwords without echoing them.
-Only salted PBKDF2-HMAC-SHA256 hashes are saved in the gitignored account file.
+Start the account-mode server below, then use **Register** in the HTTPS UI.
+Enter a username (1-20 ASCII letters/digits/underscores) and an 8-128 character
+nonblank password. Registration does not log in automatically: enter the password
+again and press Login. Duplicate usernames are rejected. Only salted
+PBKDF2-HMAC-SHA256 hashes are saved atomically in the gitignored JSON account file.
+An absent account file starts empty and is created by the first registration.
+
+Alternatively provision accounts through CLI before starting the server (do not
+edit the account file concurrently with a running server). Create a certificate once:
 
 ```powershell
 .\.venv\Scripts\python.exe -m app.server.auth alice
@@ -106,7 +113,7 @@ Open **https://127.0.0.1:8011** and **https://127.0.0.1:8012** and enter the
 provisioned username/password. Account mode requires HTTPS on the local adapter
 as well as verified TLS to the collaboration server, protecting passwords on
 both TCP hops. Passwords are never stored in browser storage, logs, or client
-attributes. The password field is cleared after every login attempt.
+attributes. The password field is cleared after every login/registration attempt.
 
 The shared certificate/key commands above are for processes on **one machine**.
 For separate LAN machines, generate each local UI's own certificate/key and
@@ -119,6 +126,38 @@ identifies a DNS name. All participants need the same privately distributed AES 
 events and browser feed, resets recipients/progress, and leaves the local web
 listener running. Press Login again for a new token and empty chat history.
 Other clients' history and successfully downloaded files are preserved.
+
+### Disconnection and pending chat policy
+
+Every outgoing chat gets a stable UUID before its first send. Its state is
+`PENDING -> SENDING -> DELIVERED`; a send failure leaves it pending. A UDP transport
+ACK does **not** mark it delivered: DELIVERED means every intended recipient
+application accepted it and sent CHAT_ACK. It is not a human read receipt.
+The server relays that result as CHAT_RECEIPT. Empty-recipient broadcasts are rejected.
+
+The client retains pending chats in a separate **RAM-only outbox**, sends the
+oldest first, and retries at bounded 1-8 second intervals while connected. Private
+targets and the broadcast target snapshot stay fixed across retries. Retries keep
+the message UUID, and recipients suppress duplicates by `(sender, message_id)`.
+The HTTP chat response remains `{ok:true}` with `send_chat()` returning None;
+the browser gets outgoing chats/status only from state polling, avoiding duplicates.
+
+Unexpected TCP loss closes the failed transport and visibly disconnects the UI.
+Passwordless demo mode tries a fresh session with 1-8 second backoff. **Account
+mode asks for Login again**, then resumes the same account's pending messages.
+Session expiration also requires Login again. No password or refresh credential
+is saved for background authentication, and TLS validation stays enabled.
+TCP loss alone cannot identify whether the cause was server restart or network loss.
+Each new session derives fresh chat/ACK stream IDs, so reusing a UDP port cannot
+accidentally reuse a previous login's ordering state or accept its delayed chat.
+
+Explicit Logout cancels reconnect attempts and clears session events/DOM. Pending
+messages remain privately associated with their account in this local process;
+only successfully logging in as that same account can reveal/retry them. Another
+account never sees or sends them. Closing the local application loses its outbox;
+there is no chat database or promise of synchronization after application restart.
+Each outbox holds at most 500 messages; recipient dedup caches hold 5,000 IDs/hashes.
+Deduplication is bounded to this cache and the local app lifetime, not durable exactly-once delivery.
 
 ## 4. Run tests
 
@@ -162,6 +201,8 @@ changes must be agreed before merging. Keep changes on separate Git branches.
 - `docs/rubric_checklist.md`: current progress against all ten rubric points
 - `docs/test_plan.md`: repeatable test scenarios
 - `docs/report_outline.md`: report requirements
+- `docs/wireshark_demo.md`: real packet capture, byte offsets, retransmission demo
+- `docs/integration_notes.md`: Member 4 selection, excluded changes and test evidence
 
 ## 7. Current limitations (do not hide in a report)
 
@@ -177,10 +218,11 @@ changes must be agreed before merging. Keep changes on separate Git branches.
 - A UDP timeout means delivery is uncertain. The next send on that stream first
   retransmits retained frames with their original IDs/sequences. Late duplicates
   cannot deliver twice. Re-entering the same chat text creates a new message.
-- Chat's outgoing line reports a server ACK; a separate receipt reports recipient
-  transport ACKs, not that a person read it. File success needs FILE_RECEIPT after
-  receiver SHA-256 verification.
-- Browser automation could not initialize in this environment. Actual browser
+- New clients use message IDs and recipient application ACKs for chat delivery.
+  Legacy CHAT messages remain routable but have no outbox delivery guarantee.
+  File success still needs FILE_RECEIPT after receiver SHA-256 verification.
+- Browser automation was stopped because the tool could not confidently determine
+  the Windows browser URL to enforce policy. Actual integrated browser
   rendering, browser certificate trust, LAN, very large files and long-running
   tests remain manual checks. BBR/CUBIC remains unimplemented.
 - The browser UI uses a raw-socket localhost HTTP adapter; do not expose it to the Internet.

@@ -2,9 +2,12 @@
 
 ## Automated tests
 
-Verified on 2026-11-12: baseline 28/28 tests; final 41/41 tests, smoke test,
-20-client load test and JavaScript DOM-double checks passed. No existing tests
-were removed or skipped. Import audit of 35 Python files found only
+Initial finalization on 2026-11-12 verified 28 -> 41 tests. Integration started
+from that clean 41-test main. No existing tests were removed or skipped.
+Final integration verification: **61/61 Python tests**, smoke test, 20-client
+load test and JavaScript DOM-double checks passed. Real capture demo passed;
+TShark independently verified 373 packets and repeated DATA/ACK packet IDs.
+Import audit of 40 Python files found only
 `cryptography` (installed version 46.0.7) outside the standard library/project.
 
 From the repository root:
@@ -72,11 +75,17 @@ failure, malformed/oversized packets, late duplicates and in-order delivery.
 
 `scripts/test_ui.cjs` runs the real inline JavaScript against a small DOM double.
 It checks password clearing, error visibility, password entry while polling,
-logout history/recipient/progress reset, relogin and stale-response guards.
+logout history/recipient/progress reset, relogin and stale-response guards. It also
+checks registration/password clearing, detailed file labels and stable-ID outgoing
+dedup/status rendering. The integration tests add atomic persistent registration,
+ordered outbox replay after a server restart, recipient application ACK loss,
+cross-account isolation and reuse of the previous session's UDP port.
 It does **not** prove browser rendering, browser security or file chooser behavior.
 
-Browser automation was attempted but both available runtimes failed at startup:
-`failed to write kernel assets: The system cannot find the path specified`.
+The earlier environment could not initialize browser automation. In the integration
+attempt the runtime initialized, but the browser access host was unavailable and
+native fallback was stopped because the tool could not confidently determine the
+Windows browser URL for policy enforcement. No browser E2E pass is claimed.
 Complete these manual checks using the README account-mode commands:
 
 - [ ] Configure browser trust for the locally generated certificate (or use an
@@ -84,7 +93,8 @@ Complete these manual checks using the README account-mode commands:
 - [ ] Wrong password shows an error and clears the password field; correct
       credentials display username and both online users. Demo mode says no password.
 - [ ] Broadcast/private chat goes to the intended peers; outgoing server ACK and
-      recipient transport receipt have distinct labels. Offline recipient shows ERROR.
+      recipient application receipt have distinct labels. Offline recipient stays
+      PENDING and shows the error; recipient return allows ordered retry.
 - [ ] Use the file chooser for empty/text/binary files; see progress, receiver path
       and sender's SHA-256 receipt; compare with `Get-FileHash -Algorithm SHA256`.
 - [ ] Send chat during a sufficiently large transfer; chat appears before file completion.
@@ -92,4 +102,15 @@ Complete these manual checks using the README account-mode commands:
       sending is disabled. Other UI goes offline; completed files remain on disk.
 - [ ] Login again on the same page; no old messages reappear. Repeat logout;
       close a network connection and verify disconnected status and clean relogin.
+- [ ] Register through HTTPS, reject duplicate/invalid accounts and log in after
+      server restart. Confirm no password is saved in browser storage.
+- [ ] Lose the server during chat, restart it, log in as the same account and
+      observe the same pending message IDs become DELIVERED in order, once each.
+- [ ] Log in as a different account after logout; no previous account's pending
+      text appears or is transmitted. Closing the local process loses its RAM outbox.
 - [ ] Repeat on two LAN machines with correct certificates, then collect screenshots.
+
+Actual packet evidence is available separately: `evidence/captures/integration-loopback.pcapng`
+contains 373 captured loopback frames, including repeated encrypted DATA after a
+controlled lost ACK. See `wireshark_demo.md` for filters, frame numbers and SHA-256.
+The 16 Member 4 Windows/Ubuntu images retain their original branch provenance.

@@ -19,6 +19,7 @@
     .event { padding: 5px 3px; border-bottom: 1px solid #eee; font-size: 14px; overflow-wrap: anywhere; }
     .muted { color: #666; }
     .error { color: #b42318; }
+    .status-error { color: #b42318; }
     progress { width: 220px; vertical-align: middle; }
     footer { color: #666; font-size: 12px; margin-top: 15px; }
   </style>
@@ -26,13 +27,15 @@
 <body>
 <main>
   <h1>Collaboration App — Local Demo</h1>
-  <p id="status" class="muted">Connecting...</p>
+  <p id="status" class="muted" aria-live="polite">Connecting...</p>
   <form id="login-form" class="line">
     <input id="username" type="text" placeholder="Username" maxlength="20" autocomplete="username" required>
-    <input id="password" type="password" placeholder="Password" autocomplete="off" hidden>
-    <button type="submit">Login</button>
+    <input id="password" type="password" placeholder="Password (registration: 8-128 characters)" maxlength="128" autocomplete="off" hidden>
+    <button id="login-button" type="submit">Login</button>
+    <button id="register" type="button" hidden>Register</button>
   </form>
   <button id="logout" type="button" disabled>Logout</button>
+  <p id="outbox-status" class="muted"></p>
   <div class="line"><b>Online users:</b> <span id="online">...</span></div>
   <div class="line">
     <label for="recipient">Send to</label>
@@ -57,6 +60,7 @@
   let refreshing = false;
   let wasConnected = false;
   let loginError = '';
+  const renderedChats = new Map();
   const $ = (id) => document.getElementById(id);
   function addLine(text, isError = false) {
     const line = document.createElement('div');
@@ -65,6 +69,29 @@
     $('feed').appendChild(line);
     $('feed').scrollTop = $('feed').scrollHeight;
     if ($('feed').children.length > 250) $('feed').firstChild.remove();
+    return line;
+  }
+  function showChat(chat) {
+    const key = chat.message_id ? chat.sender + ':' + chat.message_id : 'event:' + chat.id;
+    let row = renderedChats.get(key);
+    if (row && row.chat.delivery === 'DELIVERED') return;
+    if (!row) {
+      row = {line:addLine(''), chat:chat};
+      renderedChats.set(key, row);
+      if (renderedChats.size > 500) renderedChats.delete(renderedChats.keys().next().value);
+    }
+    row.chat = {...row.chat, ...chat};
+    const item = row.chat;
+    row.line.textContent = '[' + item.sender + ' → ' +
+      (item.recipient === '*' ? 'everyone' : item.recipient) + '] ' + item.text +
+      (item.outgoing ? ' (' + (item.delivery || item.status || 'PENDING') + ')' : '');
+  }
+  function updateChat(messageId, status) {
+    for (const row of renderedChats.values()) {
+      if (row.chat.message_id === messageId && row.chat.outgoing && row.chat.delivery !== 'DELIVERED') {
+        showChat({...row.chat, delivery:status});
+      }
+    }
   }
   async function api(path, options) {
     const response = await fetch(path, options);
@@ -92,10 +119,19 @@
         ' | User: ' + (data.username || '(none)') + (data.connected ? ' | Connected' : ' | Logged out or disconnected');
       if (loginError) $('status').textContent += ' | ' + loginError;
       if (!data.connected && data.disconnect_reason) $('status').textContent += ' | ' + data.disconnect_reason;
+      $('status').className = data.connected ? 'muted' : 'status-error';
+      if (data.reauth_required) $('status').textContent += ' | Disconnected: log in again to resume your pending messages';
+      if (data.reconnecting) $('status').textContent += ' | Disconnected: retrying demo connection (1-8 seconds)';
+      if (data.reconnect_error) $('status').textContent += ' | ' + data.reconnect_error;
       $('login-form').hidden = data.connected;
       $('logout').disabled = !data.connected;
       $('password').hidden = !data.account_mode;
       $('password').required = data.account_mode;
+      $('register').hidden = !data.registration_enabled || data.connected;
+      $('recipient').disabled = !data.connected;
+      $('outbox-status').textContent = data.connected
+        ? 'Pending chats: ' + (data.outbox || []).length + ' | DELIVERED = recipient application acknowledged'
+        : 'Pending messages are kept privately in RAM; log in as the same account to resume.';
       if (!$('username').value && data.username) $('username').value = data.username;
       for (const form of [$('chat-form'), $('file-form')]) {
         for (const input of form.elements) input.disabled = !data.connected;
@@ -110,30 +146,49 @@
         if (event.id <= cursor) continue;
         cursor = event.id;
         if (event.type === 'CHAT') {
-          addLine('[' + event.sender + ' → ' + (event.recipient === '*' ? 'everyone' : event.recipient) + '] ' + event.text +
-            (event.outgoing ? ' (server ACK; awaiting recipient)' : ''));
+          showChat(event);
+        } else if (event.type === 'CHAT_STATUS') {
+          updateChat(event.message_id, event.status);
         } else if (event.type === 'ERROR') {
           addLine('ERROR: ' + event.message, true);
         } else if (event.type === 'FILE_COMPLETE') {
           addLine('File received and SHA-256 verified: ' + event.path);
+          $('progress').value = 100;
+          $('progress-label').textContent = 'Received; SHA-256 verified';
         } else if (event.type === 'FILE_RECEIPT') {
           addLine('Receiver ' + event.sender + ': ' + event.status + ' (' + event.message + ')');
+          $('progress-label').textContent = event.status === 'ok'
+            ? 'Recipient verified SHA-256' : 'Recipient reported failure: ' + event.message;
         } else if (event.type === 'CHAT_RECEIPT') {
-          addLine(event.message + ': ' + (event.recipients.join(', ') || '(no recipients)'));
+          updateChat(event.message_id, event.status);
         } else if (event.type === 'UPLOAD_SENT') {
           addLine('Server acknowledged all file chunks; waiting for recipient');
+          $('progress-label').textContent = 'Server received all chunks; recipient verification pending';
         } else if (event.type === 'INFO') {
           addLine(event.message);
-        } else if (event.type === 'FILE_PROGRESS' || event.type === 'UPLOAD_PROGRESS') {
+        } else if (event.type === 'FILE_PROGRESS') {
           $('progress').value = event.percent;
-          $('progress-label').textContent = event.percent + '%';
+          $('progress-label').textContent = 'Receiving from ' + (event.sender || 'peer') + ': ' + event.percent + '%';
+        } else if (event.type === 'UPLOAD_PROGRESS') {
+          $('progress').value = event.percent;
+          $('progress-label').textContent = 'Sending to server: ' + event.percent +
+            '% (transport ACK; recipient verification pending)';
         }
       }
-    } catch (err) { $('status').textContent = 'UI error: ' + err.message; }
+      if (data.connected) for (const item of (data.outbox || [])) showChat({...item, outgoing:true, delivery:item.status});
+    } catch (err) {
+      $('status').textContent = 'Local UI unavailable: ' + err.message;
+      $('status').className = 'status-error';
+      $('recipient').disabled = true;
+      for (const form of [$('chat-form'), $('file-form')]) {
+        for (const control of form.elements) control.disabled = true;
+      }
+    }
     finally { refreshing = false; }
   }
   function clearSession() {
     cursor = 0;
+    renderedChats.clear();
     $('feed').replaceChildren();
     $('recipient').replaceChildren(new Option('Everyone (broadcast)', '*'));
     $('online').textContent = '(none)';
@@ -142,11 +197,14 @@
     $('password').value = '';
     $('progress').value = 0;
     $('progress-label').textContent = '0%';
+    $('outbox-status').textContent = '';
   }
   $('login-form').addEventListener('submit', async (event) => {
     event.preventDefault();
     generation++;
     loginError = '';
+    $('login-button').disabled = true;
+    $('register').disabled = true;
     try {
       await api('/api/login', {method:'POST', headers:{'Content-Type':'application/json'},
         body:JSON.stringify({username:$('username').value, password:$('password').value})});
@@ -157,7 +215,26 @@
       loginError = 'Login failed: ' + err.message;
       $('status').textContent = loginError;
     }
-    finally { $('password').value = ''; }
+    finally {
+      $('password').value = '';
+      $('login-button').disabled = false;
+      $('register').disabled = false;
+    }
+  });
+  $('register').addEventListener('click', async () => {
+    $('register').disabled = true;
+    $('login-button').disabled = true;
+    try {
+      await api('/api/register', {method:'POST', headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({username:$('username').value, password:$('password').value})});
+      loginError = 'Account created. Enter the password again and click Login.';
+    } catch (err) { loginError = 'Registration failed: ' + err.message; }
+    finally {
+      $('password').value = '';
+      $('register').disabled = false;
+      $('login-button').disabled = false;
+      $('status').textContent = loginError;
+    }
   });
   $('logout').addEventListener('click', async () => {
     generation++;

@@ -6,14 +6,14 @@ Verified on 2026-11-12. This is an evidence checklist, not a predicted grade.
 |---|---|---|---|
 | 1 | Packet/message specification + state diagrams before coding | **PARTIAL** | Wire format, sequence and lifecycle diagrams in `docs/protocol.md`; cannot establish that design preceded coding |
 | 2 | Basic TCP handshake + ACK | **PASS** | Real HELLO/HELLO_OK and LOGIN/LOGIN_OK, including fragmented/coalesced control tests |
-| 3 | Authentication, IP/port/user registry | **PASS** | HTTPS local login + verified server TLS, PBKDF2 passwords, invalid/duplicate login, expiry and revoked-token tests |
+| 3 | Authentication, IP/port/user registry | **PASS** | HTTPS/TLS login and registration, PBKDF2/atomic persistent accounts, duplicate/expiry/token tests |
 | 4 | 10–20 concurrent clients/Async I/O | **PASS** | Threaded server; concurrent 20-login test and 20 connected clients in load script, localhost only |
 | 5 | Time-sensitive streaming, broadcast and unicast | **PARTIAL** | Private/broadcast routing and chat during lossy file transfer pass; BBR/CUBIC is absent and its required scope needs confirmation |
 | 6 | Reliable UDP file chunking and reassembly | **PASS** | Empty/text/binary hashes, 60 KiB lossy transfer, ordering/duplicates/retries and receiver receipts verified |
-| 7 | Error handling and network resilience | **PASS** | Real TCP loss, malformed/oversized data, UDP exhaustion/recovery, sender/receiver logout, timeout cleanup; localhost/fault injection scope |
+| 7 | Error handling and network resilience | **PASS** | TCP loss/restart, ordered outbox replay, application ACK/dedup, reused UDP port, session isolation and original cleanup tests; local scope |
 | 8 | Encrypt payload before sending | **PASS** | AES-GCM tamper tests, trusted/untrusted/hostname TLS tests; raw sockets plus standard crypto library |
-| 9 | HTTP UI with client-side JavaScript | **PARTIAL** | Raw HTTP(S) endpoints and actual JS with DOM double tested; browser automation failed to initialize, manual rendering/trust checks pending |
-| 10 | Quality, multi-client local tests | **PARTIAL** | Unit/integration, smoke, 20-client load and JS checks pass; actual browser/multiple-terminal screenshots, LAN evidence and final submission report pending |
+| 9 | HTTP UI with client-side JavaScript | **PARTIAL** | Member 4 progress/dedup UI adapted to ClientSession; HTTP(S)/JS tested, but final browser E2E stopped by URL-confidence policy |
+| 10 | Quality, multi-client local tests | **PARTIAL** | Automated tests, smoke, 20 clients, real 373-frame Npcap capture; imported Windows/Ubuntu images are historical, final browser/LAN/report pending |
 
 ## Key discrepancies that the team must not silently ignore
 

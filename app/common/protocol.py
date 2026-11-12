@@ -6,6 +6,7 @@ An ACK frame uses the same header and has no payload.
 The encrypted message is: 2-byte metadata length + JSON metadata + raw bytes.
 """
 import json
+import hashlib
 import struct
 import uuid
 
@@ -15,6 +16,12 @@ MAGIC = b"COLB"
 DATA = 1
 ACK = 2
 HEADER = struct.Struct("!4sBBI16s16s")
+
+
+def session_stream(token, channel="chat"):
+    """A fresh stream per authenticated session without exposing token bytes."""
+    digest = hashlib.sha256((channel + ":" + token).encode("ascii")).digest()
+    return uuid.UUID(bytes=digest[:16])
 
 
 def encode_frame(kind, packet_id, stream_id, sequence, payload=b""):

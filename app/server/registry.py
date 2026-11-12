@@ -5,6 +5,7 @@ import time
 from dataclasses import dataclass
 
 from app.server.auth import USERNAME
+from app.common.protocol import session_stream
 
 
 @dataclass(frozen=True)
@@ -15,6 +16,10 @@ class Session:
     udp_port: int
     control_socket: object
     expires_at: float
+
+    @property
+    def chat_stream(self):
+        return session_stream(self.token)
 
     @property
     def udp_addr(self):

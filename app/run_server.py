@@ -30,11 +30,9 @@ def main():
     accounts = tls_context = None
     try:
         if args.accounts:
-            records = read_accounts(args.accounts)
-            if not records:
-                raise ValueError("Provision at least one account")
+            records = read_accounts(args.accounts) if args.accounts.exists() else {}
             accounts = PasswordAccounts(records, max_attempts=args.max_attempts,
-                                        lock_seconds=args.lock_seconds)
+                                        lock_seconds=args.lock_seconds, path=args.accounts)
             tls_context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
             tls_context.minimum_version = ssl.TLSVersion.TLSv1_2
             tls_context.load_cert_chain(args.tls_cert, args.tls_key)

@@ -14,7 +14,7 @@ Client -> server:
 Server -> client:
 
 ```json
-{"type":"LOGIN_OK","token":"<random-session-token>","users":["alice","bob"],"version":2,"udp_port":9101}
+{"type":"LOGIN_OK","token":"<random-session-token>","chat_stream":"<session-derived-uuid>","users":["alice","bob"],"version":2,"udp_port":9101}
 ```
 
 HELLO receives `HELLO_OK`; then LOGIN is sent. In account mode the connection
@@ -28,6 +28,12 @@ hashes; account mode requires a server TLS context. Expired sessions require
 re-authentication. LOGOUT/TCP EOF revokes the token and updates the roster.
 The client closes its network session and clears events; relogin uses a new
 client/token while the local HTTP(S) listener remains available.
+
+After HELLO_OK, an unauthenticated **TLS account-mode** connection may send
+`{"type":"REGISTER","username":"alice","password":"..."}` and receives
+REGISTER_OK or ERROR, then closes. Registration requires the configured persistent
+JSON store; username/password validation and atomic writes share the account lock.
+Credentials never travel over demo/plain TCP, or over plain HTTP in account mode.
 
 ```mermaid
 stateDiagram-v2
@@ -48,7 +54,7 @@ stateDiagram-v2
 | Kind | 1 | `1=DATA`, `2=ACK` |
 | Sequence | 4 | Big endian unsigned integer, starts at 0 per (peer,stream) |
 | Packet ID | 16 | UUID; ACK references exactly this packet |
-| Stream ID | 16 | UUID; chat uses constant `...0001`; file uses file UUID |
+| Stream ID | 16 | Session-derived chat/ACK UUID; file uses file UUID (`...0001` remains a legacy sentinel) |
 | Payload | variable | For DATA: 12-byte nonce + AES-GCM ciphertext (includes 16-byte authentication tag) |
 
 Header size: **42 bytes**. Maximum UDP datagram: **1200 bytes**.
@@ -71,8 +77,9 @@ same key is dangerous; do not change this design without Member 5 review.
 | Type | Required fields | Meaning |
 |---|---|---|
 | `USERS` | `users, version` | Server updates online usernames (monotonic version avoids stale updates) |
-| `CHAT` | `sender, recipient, text` | Broadcast if `recipient="*"`, otherwise private |
-| `CHAT_RECEIPT` | `recipients, message` | Recipient transports acknowledged routing; not a read receipt |
+| `CHAT` | `sender, recipient, text, message_id, targets` | Stable UUID and fixed recipient snapshot; private targets must equal `[recipient]` |
+| `CHAT_ACK` | `sender, original_sender, message_id` | Authenticated recipient application accepted this chat |
+| `CHAT_RECEIPT` | `message_id, status, recipients, message` | PENDING or DELIVERED; delivered only after every target's application ACK |
 | `FILE_START` | `file_id, sender, recipient, name, size, total_chunks, chunk_size, sha256` | Announce file and expected hash |
 | `FILE_CHUNK` | `file_id, sender, recipient, index, data` | Binary file chunk, starts at index 0 |
 | `FILE_END` | `file_id, sender, recipient` | File transmission finished |
@@ -84,6 +91,14 @@ Client -> server messages add `token` containing the authenticated session token
 Server -> client messages intentionally omit token. `data` is a Python `bytes`
 field that becomes the raw byte suffix of the encrypted application message.
 A file stream uses the file's `file_id` as its Stream ID.
+Chat/control uses `UUID(SHA256("chat:" + session_token)[:16])`; CHAT_ACK uses
+the same derivation with `"ack:"`. The token itself is not exposed in the header.
+Both endpoints derive these IDs after LOGIN_OK. A fresh authenticated session
+therefore has fresh transport sequence spaces even if the OS reuses its old UDP
+port. The client rejects delayed chat/control frames on a previous session's stream.
+LOGIN_OK advertises `chat_stream`; new clients reject a missing/mismatched value
+instead of silently using incompatible ordering rules. Update client/server together.
+Legacy CHAT without message_id is still routed without application delivery guarantees.
 
 ## 4. Transport API (Member 2, already callable)
 
@@ -169,7 +184,45 @@ sequenceDiagram
     S-->>A: UDP ACK
     S->>B: CHAT (sender=alice)
     B-->>S: UDP ACK
+    B->>B: Accept once by (sender, message_id)
+    B->>S: CHAT_ACK (authenticated encrypted DATA)
+    S->>A: CHAT_RECEIPT (DELIVERED)
 ```
+
+### Outbox and reconnection state
+
+The sender assigns a UUID before enqueueing, including file-independent per-chat
+status. Only the oldest pending chat is attempted until its application ACKs
+complete, preserving order across a reconnect. Failed sends/unknown delivery
+remain PENDING. Online retries use 1-8 second intervals, with stable UUID/content.
+The server rejects a repeated ID with changed content and tracks at most 5,000
+routing records. Receivers retain at most 5,000 sender/ID content hashes and ACK
+duplicates again without displaying them. Reconnected peers use new UDP sockets
+and session-derived stream IDs/sequences; the application message ID survives
+that transport change. Reusing an old UDP port is covered by a regression test.
+
+`ClientSession` retains a separate ChatState per username. A successful fresh login
+is required before binding/replaying an account's state. Account passwords are not
+stored, so network loss/server restart asks for reauthentication. Demo reconnects
+with bounded 1/2/4/8-second backoff. Expiration asks for login in either mode.
+Explicit logout cancels reconnect and clears disposable events/DOM, but retains
+the private RAM outbox for a future login by its owner. Closing the local process
+discards outboxes and receiver dedup caches. No durable exactly-once or offline
+history synchronization across application restarts is claimed.
+
+### Actual window and congestion behavior
+
+Defaults: MAX_DATAGRAM=1200 bytes, FILE_CHUNK_SIZE=800 bytes, HEADER=42 bytes,
+AES-GCM overhead=28 bytes, metadata length=2 bytes, WINDOW_SIZE=4,
+ACK_TIMEOUT=0.35 seconds, MAX_RETRIES=10 (initial attempt plus ten retries).
+Full chunks carry raw bytes after metadata, not base64. The receiver checks
+sequence/chunk index, expected size/count, then SHA-256 before renaming `.part`.
+
+The fixed window limits outstanding unacknowledged packets. It is not an adaptive
+congestion window or advertised receiver-capacity scheme. There is no bandwidth/
+RTT estimator, adaptive pacing, BBR or CUBIC. Flow/window limiting and congestion
+control are different; the exact required congestion algorithm remains a teacher
+confirmation gap. No claim of BBR/CUBIC support is made.
 
 ## 8. Pending teacher confirmation
 
