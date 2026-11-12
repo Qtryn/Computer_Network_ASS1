@@ -7,6 +7,7 @@
 Client -> server:
 
 ```json
+{"type":"HELLO","version":1}
 {"type":"LOGIN","username":"alice","udp_port":54321}
 ```
 
@@ -16,9 +17,27 @@ Server -> client:
 {"type":"LOGIN_OK","token":"<random-session-token>","users":["alice","bob"],"version":2,"udp_port":9101}
 ```
 
-Other control messages: `PING`, `LOGOUT`, `ERROR`. TCP uses newline-delimited
+HELLO receives `HELLO_OK`; then LOGIN is sent. In account mode the connection
+uses verified TLS and LOGIN includes `password` (never persist it). Rejections
+include `LOGIN_FAIL`, `LOGIN_LOCKED` or `ERROR`. Demo mode also accepts the
+legacy LOGIN-first handshake, but never accepts a password. Other control
+messages include `PING`, `GET_USERS`, `LOGOUT`, `AUTH_REQUIRED`, and `ERROR`. TCP uses newline-delimited
 JSON framing because `recv()` alone does not preserve message boundaries.
-One active session per username; account passwords are **not** implemented.
+One active session per username. Account records store salted PBKDF2-SHA256
+hashes; account mode requires a server TLS context. Expired sessions require
+re-authentication. LOGOUT/TCP EOF revokes the token and updates the roster.
+The client closes its network session and clears events; relogin uses a new
+client/token while the local HTTP(S) listener remains available.
+
+```mermaid
+stateDiagram-v2
+    [*] --> LoggedOut
+    LoggedOut --> Handshake: Login (verified TLS in account mode)
+    Handshake --> LoggedOut: HELLO or LOGIN rejected
+    Handshake --> Active: HELLO_OK then LOGIN_OK
+    Active --> LoggedOut: LOGOUT / EOF / expired token
+    LoggedOut --> LoggedOut: clear events, stop UDP and heartbeat
+```
 
 ## 2. UDP frame bytes
 
@@ -53,10 +72,12 @@ same key is dangerous; do not change this design without Member 5 review.
 |---|---|---|
 | `USERS` | `users, version` | Server updates online usernames (monotonic version avoids stale updates) |
 | `CHAT` | `sender, recipient, text` | Broadcast if `recipient="*"`, otherwise private |
+| `CHAT_RECEIPT` | `recipients, message` | Recipient transports acknowledged routing; not a read receipt |
 | `FILE_START` | `file_id, sender, recipient, name, size, total_chunks, chunk_size, sha256` | Announce file and expected hash |
 | `FILE_CHUNK` | `file_id, sender, recipient, index, data` | Binary file chunk, starts at index 0 |
 | `FILE_END` | `file_id, sender, recipient` | File transmission finished |
 | `FILE_RECEIPT` | `file_id, sender, status, message` | Receiver confirms complete hash check or error |
+| `FILE_ABORT` | `file_id, message` | Server cancels interrupted/expired transfer; remove only its partial file |
 | `ERROR` | `message` | Application error response |
 
 Client -> server messages add `token` containing the authenticated session token.
@@ -77,6 +98,16 @@ transport.close()
 - `on_progress(acknowledged_packet_count)` reports UDP **hop-level** ACKs.
 - Each stream delivers its messages in order (not an infinite globally ordered stream).
 - Retransmissions are for packets missing ACKs; duplicated packets do not redeliver.
+- Producers on the same (peer, stream) are serialized; different streams remain
+  independent. An oversized event is rejected before consuming a sequence.
+- On retry exhaustion, raise TimeoutError and retain at most one window of
+  outstanding frames. The next call retransmits those exact frames with the same
+  UUIDs/sequences before its new frames, filling any receiver gap. Neither side
+  resets sequence counters. ACK loss may mean the failed call already delivered;
+  timeout is an uncertain result. Close discards the transport's pending state.
+- DATA is queued in order before sending its ACK, so an ACK send error cannot
+  discard accepted data. ACKs must match the expected peer, packet, stream and
+  sequence, with no payload. They remain unencrypted and are not a security proof.
 - **Important:** File checksum verification + FILE_RECEIPT is the end-to-end proof,
   not UDP ACK (which only says a packet arrived at the next transport hop).
 
@@ -97,6 +128,13 @@ IP MTU once headers and encryption are included. File chunks are transferred
 sequentially within a file stream, with a **fixed window of 4 UDP packets**.
 
 ## 6. File transfer sequence
+
+The server tracks both participant session tokens and last relay activity until
+FILE_RECEIPT. A disconnect, changed session, relay error or 60-second inactivity
+removes metadata and sends FILE_ABORT to remaining original sessions. Cleanup
+checks/removals share the transfer lock; no network send occurs under that lock.
+The receiver serializes writes/abort/timeout/close under its file lock. Only
+`.part` files owned by this receiver are removed; verified destinations survive.
 
 ```mermaid
 sequenceDiagram

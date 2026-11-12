@@ -24,7 +24,8 @@ CONTROL_IDLE_SECONDS = 12
 
 class CollaborationServer:
     def __init__(self, host, tcp_port, udp_port, key, *, accounts=None,
-                 tls_context=None, session_seconds=3600, clock=time.monotonic):
+                 tls_context=None, session_seconds=3600, clock=time.monotonic,
+                 transfer_timeout=60):
         if (accounts is None) != (tls_context is None):
             raise ValueError("Password accounts and a server TLS context are required together")
         self.host = host
@@ -39,6 +40,9 @@ class CollaborationServer:
         self.roster_changed = threading.Event()
         self.transfer_lock = threading.Lock()
         self.transfers = {}  # file_id -> (original sender, receiving username)
+        self.transfer_activity = {}
+        self.transfer_sessions = {}
+        self.transfer_timeout = transfer_timeout
         self.tcp = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         try:
             self.tcp.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -220,6 +224,7 @@ class CollaborationServer:
             if not self.running.is_set():
                 return
             revision, online = self.registry.snapshot()
+            self._cleanup_transfers()
             if revision != sent_revision:
                 sent_revision = revision
                 self._publish_users(revision, online)
@@ -247,6 +252,38 @@ class CollaborationServer:
             raise ValueError(f"User '{recipient}' is offline")
         self.udp.send(session.udp_addr, message, stream)
 
+    def _transfer_stale(self, file_id, users):
+        sessions = [self.registry.get(name) for name in users]
+        return (any(session is None for session in sessions)
+                or tuple(session.token for session in sessions) != self.transfer_sessions[file_id]
+                or self.clock() - self.transfer_activity[file_id] >= self.transfer_timeout)
+
+    def _abort_transfer(self, file_id, reason, stale_only=False):
+        with self.transfer_lock:
+            users = self.transfers.get(file_id)
+            if stale_only and (not users or not self._transfer_stale(file_id, users)):
+                return
+            transfer = self.transfers.pop(file_id, None)
+            self.transfer_activity.pop(file_id, None)
+            tokens = self.transfer_sessions.pop(file_id, None)
+        if transfer:
+            for username, token in zip(transfer, tokens):
+                session = self.registry.get(username)
+                if session is None or session.token != token:
+                    continue
+                try:
+                    self._forward(username, uuid.UUID(file_id), {
+                        "type": "FILE_ABORT", "file_id": file_id, "message": reason})
+                except (ValueError, TimeoutError, OSError, ConnectionError):
+                    pass  # Offline peers also clean partial files locally.
+
+    def _cleanup_transfers(self):
+        with self.transfer_lock:
+            expired = [file_id for file_id, users in self.transfers.items()
+                       if self._transfer_stale(file_id, users)]
+        for file_id in expired:
+            self._abort_transfer(file_id, "File transfer interrupted or timed out", stale_only=True)
+
     def _handle_udp(self, peer, stream, message):
         kind = message.get("type")
         username = message.get("sender")
@@ -260,23 +297,34 @@ class CollaborationServer:
                 clean = ChatService.build_message(username, message["recipient"], message["text"])
                 for dest in recipients:
                     self._forward(dest, CHAT_STREAM, clean)
+                self._forward(username, CHAT_STREAM, {
+                    "type": "CHAT_RECEIPT", "message": "Recipient transport acknowledged chat",
+                    "recipients": recipients})
             elif kind in FILE_TYPES:
                 file_id = str(message.get("file_id", ""))
                 stream_id = uuid.UUID(file_id)
                 if stream != stream_id:
                     raise ValueError("File transfer stream ID mismatch")
                 with self.transfer_lock:
+                    if not self.registry.authenticate(username, message.get("token"), peer):
+                        return
                     if kind == "FILE_START":
                         target = message.get("recipient")
-                        if target == username or not self.registry.get(target):
+                        target_session = self.registry.get(target)
+                        if target == username or not target_session:
                             raise ValueError("File recipient must be a different online user")
                         if file_id in self.transfers:
                             raise ValueError("Duplicate transfer ID")
                         self.transfers[file_id] = (username, target)
+                        self.transfer_sessions[file_id] = (session.token, target_session.token)
+                        self.transfer_activity[file_id] = self.clock()
                     transfer = self.transfers.get(file_id)
                     if not transfer or transfer[0] != username:
                         raise ValueError("Unknown file transfer")
+                    if self.transfer_sessions[file_id][0] != session.token:
+                        raise ValueError("File sender session changed")
                     target = transfer[1]
+                    self.transfer_activity[file_id] = self.clock()
                 clean = {key: value for key, value in message.items() if key != "token"}
                 self._forward(target, stream_id, clean)
                 # Keep transfer until receiver sends its final FILE_RECEIPT.
@@ -286,8 +334,12 @@ class CollaborationServer:
                     transfer = self.transfers.get(file_id)
                     if not transfer or transfer[1] != username:
                         raise ValueError("Invalid file receipt")
+                    if self.transfer_sessions[file_id][1] != session.token:
+                        raise ValueError("File recipient session changed")
                     sender = transfer[0]
                     del self.transfers[file_id]
+                    self.transfer_activity.pop(file_id, None)
+                    self.transfer_sessions.pop(file_id, None)
                 self._forward(sender, CHAT_STREAM, {
                     "type": "FILE_RECEIPT", "file_id": file_id,
                     "sender": username, "status": message.get("status", "error"),
@@ -295,6 +347,12 @@ class CollaborationServer:
             else:
                 raise ValueError(f"Unknown application event: {kind}")
         except (ValueError, KeyError, TypeError, TimeoutError, OSError) as exc:
+            if kind in FILE_TYPES:
+                file_id = str(message.get("file_id", ""))
+                with self.transfer_lock:
+                    owned = self.transfers.get(file_id, (None,))[0] == username
+                if owned:
+                    self._abort_transfer(file_id, f"File relay failed: {exc}")
             self._send_error(username, exc)
 
     def close(self):
@@ -316,3 +374,7 @@ class CollaborationServer:
         deadline = time.monotonic() + 2.0
         for worker, _ in connections:
             worker.join(timeout=max(0, deadline - time.monotonic()))
+        with self.transfer_lock:
+            self.transfers.clear()
+            self.transfer_activity.clear()
+            self.transfer_sessions.clear()

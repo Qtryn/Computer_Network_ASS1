@@ -7,6 +7,7 @@ import math
 import os
 import re
 import uuid
+import time
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -85,13 +86,16 @@ class ReceivingFile:
     handle: object
     next_chunk: int = 0
     bytes_written: int = 0
+    last_activity: float = 0.0
 
 
 class FileReceiver:
-    def __init__(self, download_dir):
+    def __init__(self, download_dir, *, timeout=60, clock=time.monotonic):
         self.download_dir = Path(download_dir)
         self.download_dir.mkdir(parents=True, exist_ok=True)
         self.incoming = {}
+        self.timeout = timeout
+        self.clock = clock
 
     def process(self, event):
         """Consume a file event, return a progress/complete event (or None).
@@ -121,12 +125,14 @@ class FileReceiver:
                 temp_path = self.download_dir / f".{file_id}.part"
                 handle = open(temp_path, "wb")
                 self.incoming[file_id] = ReceivingFile(name, size, total, chunk_size, digest, temp_path, handle)
+                self.incoming[file_id].last_activity = self.clock()
                 return {"type": "FILE_PROGRESS", "file_id": file_id, "name": name,
                         "sender": event.get("sender"), "percent": 0}
 
             current = self.incoming.get(file_id)
             if current is None:
                 raise ValueError("Received file data before FILE_START")
+            current.last_activity = self.clock()
             if kind == "FILE_CHUNK":
                 if event.get("index") != current.next_chunk:
                     raise ValueError("File chunks arrived out of order")
@@ -168,12 +174,23 @@ class FileReceiver:
             raise
 
     def abort(self, file_id):
-        current = self.incoming.pop(file_id, None)
+        current = self.incoming.get(file_id)
         if current:
             if not current.handle.closed:
                 current.handle.close()
             current.temp_path.unlink(missing_ok=True)
+            # Publish removal only after disk cleanup succeeds. If unlink fails,
+            # retain metadata so a later cleanup can retry instead of orphaning it.
+            del self.incoming[file_id]
 
     def close(self):
         for file_id in list(self.incoming):
             self.abort(file_id)
+
+    def cleanup_expired(self):
+        """Caller holds the same file lock used for process/abort/close."""
+        expired = [file_id for file_id, current in self.incoming.items()
+                   if self.clock() - current.last_activity >= self.timeout]
+        for file_id in expired:
+            self.abort(file_id)
+        return expired

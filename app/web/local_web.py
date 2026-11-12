@@ -1,12 +1,14 @@
 """Minimal localhost HTTP interface built on raw TCP sockets.
 
 This is not a web framework. It supports only the routes required by the
-assignment UI: GET /, GET /api/state, POST /api/chat and POST /api/file.
+assignment UI: GET /, GET /api/state, POST /api/login, /api/logout, /api/chat,
+and /api/file. Account login uses the same raw sockets wrapped with TLS.
 The browser's JavaScript talks to this local server; the Python client sends
 chat and files to the collaboration server using the team's UDP transport.
 """
 import json
 import socket
+import ssl
 import tempfile
 import threading
 from pathlib import Path
@@ -17,11 +19,55 @@ MAX_HEADERS = 16 * 1024
 MAX_CHAT_REQUEST = 4096
 
 
+class ClientSession:
+    """Keep the local HTTP listener alive across network login/logout."""
+    def __init__(self, factory, *, client=None, account_mode=False, username=""):
+        self.factory = factory
+        self.client = client
+        self.account_mode = account_mode
+        self.username = username
+        self.lock = threading.Lock()
+
+    def login(self, username, password=None):
+        with self.lock:
+            if self.client and self.client.running.is_set():
+                raise ValueError("Already logged in; log out first")
+            if self.client:
+                self.client.close()
+                self.client = None
+            if self.account_mode and not password:
+                raise ValueError("Password is required in account mode")
+            if not self.account_mode and password:
+                raise ValueError("Demo mode does not use passwords")
+            self.client = self.factory(username, password if self.account_mode else None)
+
+    def logout(self):
+        with self.lock:
+            if self.client:
+                self.client.close()
+                self.client = None
+
+    def active_client(self):
+        with self.lock:
+            client = self.client
+        if client is None or not client.running.is_set():
+            raise ConnectionError("Log in before sending messages or files")
+        return client
+
+    def get_state(self, after_id=0):
+        with self.lock:
+            state = self.client.get_state(after_id) if self.client else {
+                "username": self.username, "connected": False, "online": [],
+                "events": [], "last_id": 0, "session_id": None}
+        return {**state, "account_mode": self.account_mode}
+
+
 def send_response(connection, status, content, content_type="application/json; charset=utf-8"):
     """Write one small HTTP response. Each request uses a separate connection."""
     if isinstance(content, dict):
         content = json.dumps(content, ensure_ascii=False).encode("utf-8")
-    reason = {200: "OK", 202: "Accepted", 400: "Bad Request", 404: "Not Found"}[status]
+    reason = {200: "OK", 202: "Accepted", 400: "Bad Request", 404: "Not Found",
+              503: "Service Unavailable"}[status]
     headers = (
         f"HTTP/1.1 {status} {reason}\r\n"
         f"Content-Type: {content_type}\r\n"
@@ -92,12 +138,28 @@ def handle_request(connection, client):
         if method == "GET" and url.path == "/api/state":
             after = int(parse_qs(url.query).get("after", ["0"])[0])
             return send_response(connection, 200, client.get_state(after))
-        if method != "POST" or url.path not in ("/api/chat", "/api/file"):
+        if method != "POST" or url.path not in ("/api/chat", "/api/file", "/api/login", "/api/logout"):
             return send_response(connection, 404, {"error": "Endpoint not found"})
 
         size = int(headers.get("content-length", "-1"))
         if size < 0:
             raise ValueError("Content-Length is required")
+
+        if url.path in ("/api/login", "/api/logout"):
+            if size > MAX_CHAT_REQUEST:
+                raise ValueError("Login request too large")
+            body = read_body(connection, first_bytes, size)
+            if url.path == "/api/logout":
+                client.logout()
+            else:
+                if client.account_mode and not isinstance(connection, ssl.SSLSocket):
+                    raise ValueError("Account login requires local HTTPS")
+                credentials = json.loads(body)
+                client.login(credentials["username"], credentials.get("password"))
+            return send_response(connection, 200, {"ok": True})
+
+        if isinstance(client, ClientSession):
+            client = client.active_client()
 
         if url.path == "/api/chat":
             if size > MAX_CHAT_REQUEST:
@@ -135,26 +197,39 @@ def handle_request(connection, client):
             send_response(connection, 400, {"error": str(error)})
         except OSError:
             pass
-    except OSError:
-        pass
+    except (OSError, TimeoutError, ConnectionError) as error:
+        try:
+            send_response(connection, 503, {"error": str(error) or "Network request failed"})
+        except OSError:
+            pass
     finally:
         connection.close()
 
 
-def run_local_ui(client, port):
+def run_local_ui(client, port, tls_context=None):
     """Start the browser HTTP adapter; listen on 127.0.0.1 only."""
     listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     listener.bind(("127.0.0.1", port))
     listener.listen(16)
     listener.settimeout(0.5)
-    print(f"[client:{client.username}] Open http://127.0.0.1:{port}")
+    scheme = "https" if tls_context else "http"
+    print(f"[client] Open {scheme}://127.0.0.1:{port}")
+
+    def serve(connection):
+        try:
+            connection.settimeout(5)
+            if tls_context:
+                connection = tls_context.wrap_socket(connection, server_side=True)
+            handle_request(connection, client)
+        except OSError:
+            connection.close()
     try:
-        while client.running.is_set():
+        while True:
             try:
                 connection, _ = listener.accept()
             except socket.timeout:
                 continue
-            threading.Thread(target=handle_request, args=(connection, client), daemon=True).start()
+            threading.Thread(target=serve, args=(connection,), daemon=True).start()
     finally:
         listener.close()

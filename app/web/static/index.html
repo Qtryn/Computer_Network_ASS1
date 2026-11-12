@@ -6,12 +6,13 @@
   <title>Student Collaboration App</title>
   <style>
     * { box-sizing: border-box; }
+    [hidden] { display: none !important; }
     body { font-family: Arial, sans-serif; background: #f6f7f9; color: #20232a; margin: 0; }
     main { max-width: 900px; margin: 24px auto; padding: 20px; background: white; border: 1px solid #ddd; border-radius: 8px; }
     h1 { font-size: 21px; margin: 0 0 8px; }
     p, label { font-size: 14px; }
     .line { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 10px 0; }
-    input[type=text], select { padding: 9px; border: 1px solid #aaa; border-radius: 4px; }
+    input[type=text], input[type=password], select { padding: 9px; border: 1px solid #aaa; border-radius: 4px; }
     input[type=text] { flex: 1; min-width: 190px; }
     button { padding: 9px 14px; cursor: pointer; }
     #feed { height: 330px; overflow-y: auto; border: 1px solid #ddd; background: #fafafa; padding: 8px; }
@@ -26,6 +27,12 @@
 <main>
   <h1>Collaboration App — Local Demo</h1>
   <p id="status" class="muted">Connecting...</p>
+  <form id="login-form" class="line">
+    <input id="username" type="text" placeholder="Username" maxlength="20" autocomplete="username" required>
+    <input id="password" type="password" placeholder="Password" autocomplete="off" hidden>
+    <button type="submit">Login</button>
+  </form>
+  <button id="logout" type="button" disabled>Logout</button>
   <div class="line"><b>Online users:</b> <span id="online">...</span></div>
   <div class="line">
     <label for="recipient">Send to</label>
@@ -45,6 +52,11 @@
 </main>
 <script>
   let cursor = 0;
+  let sessionId;
+  let generation = 0;
+  let refreshing = false;
+  let wasConnected = false;
+  let loginError = '';
   const $ = (id) => document.getElementById(id);
   function addLine(text, isError = false) {
     const line = document.createElement('div');
@@ -61,26 +73,53 @@
     return data;
   }
   async function refresh() {
+    if (refreshing) return;
+    refreshing = true;
+    const requestGeneration = generation;
     try {
       const data = await api('/api/state?after=' + cursor);
-      $('status').textContent = 'User: ' + data.username + (data.connected ? ' | Connected' : ' | Disconnected');
+      if (requestGeneration !== generation) return;
+      if (data.session_id !== sessionId || (!data.connected && wasConnected)) {
+        clearSession();
+        sessionId = data.session_id;
+        if (data.connected && data.events.length === 0 && data.last_id > 0) {
+          refreshing = false;
+          return refresh();
+        }
+      }
+      wasConnected = data.connected;
+      $('status').textContent = (data.account_mode ? 'Account / TLS' : 'Demo / no password') +
+        ' | User: ' + (data.username || '(none)') + (data.connected ? ' | Connected' : ' | Logged out or disconnected');
+      if (loginError) $('status').textContent += ' | ' + loginError;
+      if (!data.connected && data.disconnect_reason) $('status').textContent += ' | ' + data.disconnect_reason;
+      $('login-form').hidden = data.connected;
+      $('logout').disabled = !data.connected;
+      $('password').hidden = !data.account_mode;
+      $('password').required = data.account_mode;
+      if (!$('username').value && data.username) $('username').value = data.username;
+      for (const form of [$('chat-form'), $('file-form')]) {
+        for (const input of form.elements) input.disabled = !data.connected;
+      }
       $('online').textContent = data.online.join(', ') || '(none)';
       const current = $('recipient').value;
       const recipients = data.online.filter(user => user !== data.username);
       $('recipient').replaceChildren(new Option('Everyone (broadcast)', '*'));
       for (const user of recipients) $('recipient').add(new Option(user, user));
       $('recipient').value = (current === '*' || recipients.includes(current)) ? current : '*';
-      for (const event of data.events) {
+      for (const event of (data.connected ? data.events : [])) {
         if (event.id <= cursor) continue;
         cursor = event.id;
         if (event.type === 'CHAT') {
-          addLine('[' + event.sender + ' → ' + (event.recipient === '*' ? 'everyone' : event.recipient) + '] ' + event.text);
+          addLine('[' + event.sender + ' → ' + (event.recipient === '*' ? 'everyone' : event.recipient) + '] ' + event.text +
+            (event.outgoing ? ' (server ACK; awaiting recipient)' : ''));
         } else if (event.type === 'ERROR') {
           addLine('ERROR: ' + event.message, true);
         } else if (event.type === 'FILE_COMPLETE') {
           addLine('File received and SHA-256 verified: ' + event.path);
         } else if (event.type === 'FILE_RECEIPT') {
           addLine('Receiver ' + event.sender + ': ' + event.status + ' (' + event.message + ')');
+        } else if (event.type === 'CHAT_RECEIPT') {
+          addLine(event.message + ': ' + (event.recipients.join(', ') || '(no recipients)'));
         } else if (event.type === 'UPLOAD_SENT') {
           addLine('Server acknowledged all file chunks; waiting for recipient');
         } else if (event.type === 'INFO') {
@@ -91,18 +130,58 @@
         }
       }
     } catch (err) { $('status').textContent = 'UI error: ' + err.message; }
+    finally { refreshing = false; }
   }
+  function clearSession() {
+    cursor = 0;
+    $('feed').replaceChildren();
+    $('recipient').replaceChildren(new Option('Everyone (broadcast)', '*'));
+    $('online').textContent = '(none)';
+    $('message').value = '';
+    $('file').value = '';
+    $('password').value = '';
+    $('progress').value = 0;
+    $('progress-label').textContent = '0%';
+  }
+  $('login-form').addEventListener('submit', async (event) => {
+    event.preventDefault();
+    generation++;
+    loginError = '';
+    try {
+      await api('/api/login', {method:'POST', headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({username:$('username').value, password:$('password').value})});
+      clearSession();
+      sessionId = undefined;
+      await refresh();
+    } catch (err) {
+      loginError = 'Login failed: ' + err.message;
+      $('status').textContent = loginError;
+    }
+    finally { $('password').value = ''; }
+  });
+  $('logout').addEventListener('click', async () => {
+    generation++;
+    try {
+      await api('/api/logout', {method:'POST', body:''});
+      clearSession();
+      sessionId = undefined;
+      await refresh();
+    } catch (err) { $('status').textContent = 'Logout failed: ' + err.message; }
+  });
   $('chat-form').addEventListener('submit', async (event) => {
     event.preventDefault();
+    const requestGeneration = generation;
     try {
       await api('/api/chat', {method:'POST', headers:{'Content-Type':'application/json'},
         body:JSON.stringify({recipient:$('recipient').value, text:$('message').value})});
+      if (requestGeneration !== generation) return;
       $('message').value = '';
       await refresh();
-    } catch (err) { addLine('Send failed: ' + err.message, true); }
+    } catch (err) { if (requestGeneration === generation) addLine('Send failed: ' + err.message, true); }
   });
   $('file-form').addEventListener('submit', async (event) => {
     event.preventDefault();
+    const requestGeneration = generation;
     const file = $('file').files[0];
     const recipient = $('recipient').value;
     if (!file || recipient === '*') {
@@ -111,8 +190,8 @@
     try {
       await api('/api/file?to=' + encodeURIComponent(recipient), {
         method:'POST', headers:{'X-Filename':encodeURIComponent(file.name)}, body:file});
-      addLine('File uploaded locally; sending encrypted UDP chunks...');
-    } catch (err) { addLine('File upload failed: ' + err.message, true); }
+      if (requestGeneration === generation) addLine('File uploaded locally; sending encrypted UDP chunks...');
+    } catch (err) { if (requestGeneration === generation) addLine('File upload failed: ' + err.message, true); }
   });
   refresh();
   setInterval(refresh, 1000);

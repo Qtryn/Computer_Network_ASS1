@@ -96,6 +96,7 @@ def main():
         parser.error("Passwords must be non-empty and match")
     salt = secrets.token_bytes(16)
     records[args.username] = {"salt": salt.hex(), "hash": hash_password(password, salt).hex()}
+    args.file.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", dir=args.file.parent,
                                      prefix=".accounts-", delete=False) as out:
         temporary = Path(out.name)

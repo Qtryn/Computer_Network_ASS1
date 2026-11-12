@@ -1,20 +1,19 @@
 # Assignment rubric: 10 requirements × 1 point
 
-**Important:** The following is a truthful development status of the initial
-scaffold, NOT an official or predicted grade.
+Verified on 2026-11-12. This is an evidence checklist, not a predicted grade.
 
 | Step | Requirement in handout | Current status | Evidence / remaining work |
 |---|---|---|---|
-| 1 | Packet/message specification + state diagrams before coding | **Partial** | `docs/protocol.md` has wire format and sequence diagrams; finalize state diagrams/teacher-approved spec |
-| 2 | Basic TCP handshake + ACK | **Demo works** | TCP LOGIN → LOGIN_OK in localhost smoke test; verify with instructor if separate handshake is expected |
-| 3 | Authentication, IP/port/user registry | **Basic demo works** | Username + random session token and IP/UDP port; no password authentication |
-| 4 | 10–20 concurrent clients/Async I/O | **Local 20-client test passed; LAN pending** | Threaded TCP and per-stream UDP; `scripts/load_test.py` runs 20 localhost clients |
-| 5 | Time-sensitive streaming, broadcast and unicast | **Demo works; verify HoL/congestion requirements** | Chat routing and per-stream workers; fixed window, no BBR/CUBIC |
-| 6 | Reliable UDP file chunking and reassembly | **Demo works; stress pending** | FileSender/FileReceiver + UDP ACK/retry; binary + empty unit tests + localhost smoke |
-| 7 | Error handling and network resilience | **Partial** | Timeouts, retries, logout and basic malformed-packet handling; test crash/LAN outage/reconnect |
-| 8 | Encrypt payload before sending | **Demo works** | AES-GCM for UDP DATA, tamper unit test; no negotiated key exchange |
-| 9 | HTTP UI with client-side JavaScript | **Demo works; interpretation pending** | Browser UI via Python localhost raw HTTP sockets + JS; confirm HTTP/CLI contradiction with teacher |
-| 10 | Quality, multi-client local tests | **Partial** | 13 unit tests + 2-client smoke + 20-client localhost script; add LAN evidence and final report |
+| 1 | Packet/message specification + state diagrams before coding | **PARTIAL** | Wire format, sequence and lifecycle diagrams in `docs/protocol.md`; cannot establish that design preceded coding |
+| 2 | Basic TCP handshake + ACK | **PASS** | Real HELLO/HELLO_OK and LOGIN/LOGIN_OK, including fragmented/coalesced control tests |
+| 3 | Authentication, IP/port/user registry | **PASS** | HTTPS local login + verified server TLS, PBKDF2 passwords, invalid/duplicate login, expiry and revoked-token tests |
+| 4 | 10–20 concurrent clients/Async I/O | **PASS** | Threaded server; concurrent 20-login test and 20 connected clients in load script, localhost only |
+| 5 | Time-sensitive streaming, broadcast and unicast | **PARTIAL** | Private/broadcast routing and chat during lossy file transfer pass; BBR/CUBIC is absent and its required scope needs confirmation |
+| 6 | Reliable UDP file chunking and reassembly | **PASS** | Empty/text/binary hashes, 60 KiB lossy transfer, ordering/duplicates/retries and receiver receipts verified |
+| 7 | Error handling and network resilience | **PASS** | Real TCP loss, malformed/oversized data, UDP exhaustion/recovery, sender/receiver logout, timeout cleanup; localhost/fault injection scope |
+| 8 | Encrypt payload before sending | **PASS** | AES-GCM tamper tests, trusted/untrusted/hostname TLS tests; raw sockets plus standard crypto library |
+| 9 | HTTP UI with client-side JavaScript | **PARTIAL** | Raw HTTP(S) endpoints and actual JS with DOM double tested; browser automation failed to initialize, manual rendering/trust checks pending |
+| 10 | Quality, multi-client local tests | **PARTIAL** | Unit/integration, smoke, 20-client load and JS checks pass; actual browser/multiple-terminal screenshots, LAN evidence and final submission report pending |
 
 ## Key discrepancies that the team must not silently ignore
 

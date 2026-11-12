@@ -39,8 +39,12 @@ key, sent privately outside the GitHub repository. Use only a test key.
 Alice UI: http://127.0.0.1:8011  
 Bob UI: http://127.0.0.1:8012
 
+Press **Login** on both pages (these commands use passwordless demo mode).
 Send a private message, broadcast to everyone, and send a binary file.
 Received file: `downloads/bob/`.
+Logout clears the local session and leaves the page available for another login.
+For password accounts, verified server TLS and local HTTPS, use the account-mode
+commands and certificate setup in `README.md`.
 
 ## 4. LAN demo
 
