@@ -12,8 +12,8 @@ Verified on 2026-11-12. This is an evidence checklist, not a predicted grade.
 | 6 | Reliable UDP file chunking and reassembly | **PASS** | Empty/text/binary hashes, 60 KiB lossy transfer, ordering/duplicates/retries and receiver receipts verified |
 | 7 | Error handling and network resilience | **PASS** | TCP loss/restart, ordered outbox replay, application ACK/dedup, reused UDP port, session isolation and original cleanup tests; local scope |
 | 8 | Encrypt payload before sending | **PASS** | AES-GCM tamper tests, trusted/untrusted/hostname TLS tests; raw sockets plus standard crypto library |
-| 9 | HTTP UI with client-side JavaScript | **PARTIAL** | Member 4 progress/dedup UI adapted to ClientSession; HTTP(S)/JS tested, but final browser E2E stopped by URL-confidence policy |
-| 10 | Quality, multi-client local tests | **PARTIAL** | Automated tests, smoke, 20 clients, real 373-frame Npcap capture; imported Windows/Ubuntu images are historical, final browser/LAN/report pending |
+| 9 | HTTP UI with client-side JavaScript | **PARTIAL** | ClientSession integration, real Chrome demo login/chat/files/logout/reconnect passed; account/HTTPS browser checks remain manual; see evidence/browser-e2e.md |
+| 10 | Quality, multi-client local tests | **PARTIAL** | 62 Python tests, smoke, 20 clients, real Chrome demo checks and 373-frame Npcap capture; historical images retain provenance; LAN/final report pending |
 
 ## Key discrepancies that the team must not silently ignore
 

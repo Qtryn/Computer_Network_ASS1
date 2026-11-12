@@ -46,3 +46,18 @@ class ClientEventTests(unittest.TestCase):
         client.token = None
         client._on_udp_message(client.server_udp, None, {"type": "CHAT", "sender": "alice", "text": "stale"})
         self.assertEqual(list(client.events), [])
+
+    def test_file_progress_cannot_evict_chat_between_browser_polls(self):
+        client = self.make_client()
+        chat = client._emit({"type": "CHAT", "text": "during transfer"})
+        for chunk in range(2000):
+            for kind in ("FILE_PROGRESS", "UPLOAD_PROGRESS"):
+                client._emit({"type": kind, "file_id": "large", "percent": chunk // 20})
+        client._emit({"type": "FILE_PROGRESS", "file_id": "other", "percent": 10})
+        events = list(client.events)
+        self.assertEqual(len(events), 4)
+        self.assertEqual(events[0], chat)
+        self.assertEqual([event["id"] for event in events], sorted(event["id"] for event in events))
+        self.assertEqual(events[1]["percent"], 99)
+        self.assertGreater(events[1]["id"], chat["id"])
+        self.assertEqual(events[-1]["file_id"], "other")

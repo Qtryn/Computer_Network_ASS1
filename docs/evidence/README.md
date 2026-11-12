@@ -11,6 +11,8 @@ implementation. The capture filter restricted traffic to TCP 9100 / UDP 9101.
 It contains only synthetic localhost demo traffic, not an exported AES key or TLS
 private key. See `../wireshark_demo.md` for exact filters and observations.
 
-The final browser E2E attempt was stopped by Computer Use because it could not
-confidently determine the current Windows browser URL for policy enforcement.
-No new integrated-browser screenshots or browser E2E pass are claimed.
+The initial browser attempt was stopped by URL-confidence enforcement. A later
+real Windows Chrome retry verified the integrated localhost demo flows and found
+two UI/event-buffer bugs, now fixed. See [browser-e2e.md](browser-e2e.md) for actual
+observations, file hashes and the remaining account/HTTPS browser scope. No new
+screenshot files are included; imported images remain historical evidence.

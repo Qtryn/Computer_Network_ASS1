@@ -174,7 +174,8 @@ password errors, certificate validation, logout/relogin, revoked tokens, empty/
 text/binary files, SHA-256, disconnect/timeout cleanup, malformed messages,
 loss/duplicates/reordering, and chat during file transfer. The load script keeps
 20 clients connected. The JavaScript test uses a DOM double, not a real browser.
-See `docs/test_plan.md` for the remaining manual browser/LAN checklist.
+Real Chrome demo-mode verification is recorded in `docs/evidence/browser-e2e.md`;
+see `docs/test_plan.md` for remaining account/HTTPS browser and LAN checks.
 
 ## 5. Team ownership and readable folders
 
@@ -221,10 +222,11 @@ changes must be agreed before merging. Keep changes on separate Git branches.
 - New clients use message IDs and recipient application ACKs for chat delivery.
   Legacy CHAT messages remain routable but have no outbox delivery guarantee.
   File success still needs FILE_RECEIPT after receiver SHA-256 verification.
-- Browser automation was stopped because the tool could not confidently determine
-  the Windows browser URL to enforce policy. Actual integrated browser
-  rendering, browser certificate trust, LAN, very large files and long-running
-  tests remain manual checks. BBR/CUBIC remains unimplemented.
+- Real Windows Chrome verified localhost demo login, chat, file chooser/receipts,
+  chat during binary transfer, logout/relogin and server restart. Browser
+  account/HTTPS registration and certificate trust, LAN, very large files and
+  long-running tests remain manual checks. See `docs/evidence/browser-e2e.md`.
+  BBR/CUBIC remains unimplemented.
 - The browser UI uses a raw-socket localhost HTTP adapter; do not expose it to the Internet.
 - Original project statement says individual/pair, while this allocation has
   five members. Confirm authorized group size and the official deadline.

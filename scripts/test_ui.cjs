@@ -5,10 +5,10 @@ const vm = require('node:vm');
 const path = require('node:path');
 
 class Element {
-  constructor() { this.value = ''; this.children = []; this.elements = []; this.handlers = {}; this.files = []; }
+  constructor() { this.value = ''; this.children = []; this.elements = []; this.handlers = {}; this.files = []; this.rebuilds = 0; }
   addEventListener(name, callback) { this.handlers[name] = callback; }
   appendChild(child) { this.children.push(child); }
-  replaceChildren(...children) { this.children = children; this.value = children[0]?.value || ''; }
+  replaceChildren(...children) { this.children = children; this.value = children[0]?.value || ''; this.rebuilds++; }
   add(child) { this.children.push(child); }
 }
 
@@ -66,6 +66,11 @@ async function main() {
   assert.equal(elements['login-form'].hidden, true);
   assert.equal(elements.message.disabled, false);
   assert.equal(elements.password.value, '');
+  elements.recipient.value = 'bob';
+  const recipientRebuilds = elements.recipient.rebuilds;
+  await vm.runInContext('refresh()', context);
+  assert.equal(elements.recipient.rebuilds, recipientRebuilds, 'polling must not rebuild an open recipient dropdown');
+  assert.equal(elements.recipient.value, 'bob');
   state.events.push({id:2, type:'CHAT', sender:'bob', recipient:'alice', text:'old history'});
   state.last_id = 2;
   await vm.runInContext('refresh()', context);

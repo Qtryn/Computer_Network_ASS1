@@ -8,7 +8,8 @@
 - `git merge-base --is-ancestor origin/tv1-server-core origin/main` returned 0;
   that server branch is already merged and was not merged again.
 - Selection was performed with reviewed diffs and targeted patches. There was
-  no blind merge, conflict-marker resolution, history rewrite, main push or main merge.
+  no blind merge, conflict-marker resolution or history rewrite. The user later
+  authorized a local main merge after browser verification; no push is included.
 
 ## Selected and excluded changes
 
@@ -73,7 +74,7 @@ dependency was added: import audit found only cryptography outside the stdlib.
 Final checks on 2026-11-12:
 
 ```text
-python -m unittest discover -s tests -v   61 passed, 0 failed (baseline: 41)
+python -m unittest discover -s tests -v   62 passed, 0 failed (baseline: 41)
 python -m scripts.smoke_test             PASS
 python -m scripts.load_test              PASS, 20 connected clients
 node scripts/test_ui.cjs                 PASS, DOM double only
@@ -90,8 +91,10 @@ The final capture contains 373 actual loopback frames (TCP 9100 / UDP 9101),
 including TLS, DATA/ACK, repeated UUID/ciphertext after lost ACK, file transfer
 and fresh sessions after restart. See `wireshark_demo.md` for frame numbers/hash.
 
-Browser E2E was attempted with the updated computer-use runtime. Browser access
-host was unavailable; native fallback was stopped because the tool could not
-confidently determine the current Windows browser URL to enforce policy. No
-further UI input was issued. Local test processes were stopped. The imported
-Member 4 screenshots and DOM-double checks are not a final browser E2E pass.
+After the initial URL-confidence block, a real Windows Chrome retry verified
+demo-mode login, private/broadcast chat, native file chooser, Unicode/empty/binary
+SHA-256 receipts, chat during transfer, logout/relogin and server restart. It found
+and fixed per-poll dropdown rebuilding and progress events evicting chat from the
+bounded event buffer. Added regressions passed with the full suite. Details and
+remaining account/HTTPS browser scope: [evidence/browser-e2e.md](evidence/browser-e2e.md).
+Imported Member 4 screenshots remain historical and are not final-run evidence.

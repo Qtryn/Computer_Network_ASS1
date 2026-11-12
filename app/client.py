@@ -172,6 +172,14 @@ class CollaborationClient:
         with self.event_lock:
             if not self.running.is_set():
                 return
+            if event.get("type") in ("FILE_PROGRESS", "UPLOAD_PROGRESS"):
+                # Keep the latest progress per transfer so chunk updates cannot
+                # evict chat/receipts while a background browser polls slowly.
+                for previous in self.events:
+                    if (previous.get("type") == event["type"] and
+                            previous.get("file_id") == event.get("file_id")):
+                        self.events.remove(previous)
+                        break
             self.event_id += 1
             emitted = {"id": self.event_id, **event}
             self.events.append(emitted)

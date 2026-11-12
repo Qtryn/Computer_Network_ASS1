@@ -60,6 +60,7 @@
   let refreshing = false;
   let wasConnected = false;
   let loginError = '';
+  let recipientRoster = null;
   const renderedChats = new Map();
   const $ = (id) => document.getElementById(id);
   function addLine(text, isError = false) {
@@ -139,9 +140,13 @@
       $('online').textContent = data.online.join(', ') || '(none)';
       const current = $('recipient').value;
       const recipients = data.online.filter(user => user !== data.username);
-      $('recipient').replaceChildren(new Option('Everyone (broadcast)', '*'));
-      for (const user of recipients) $('recipient').add(new Option(user, user));
-      $('recipient').value = (current === '*' || recipients.includes(current)) ? current : '*';
+      const rosterKey = JSON.stringify(recipients);
+      if (recipientRoster !== rosterKey) {
+        $('recipient').replaceChildren(new Option('Everyone (broadcast)', '*'));
+        for (const user of recipients) $('recipient').add(new Option(user, user));
+        $('recipient').value = (current === '*' || recipients.includes(current)) ? current : '*';
+        recipientRoster = rosterKey;
+      }
       for (const event of (data.connected ? data.events : [])) {
         if (event.id <= cursor) continue;
         cursor = event.id;
@@ -188,6 +193,7 @@
   }
   function clearSession() {
     cursor = 0;
+    recipientRoster = null;
     renderedChats.clear();
     $('feed').replaceChildren();
     $('recipient').replaceChildren(new Option('Everyone (broadcast)', '*'));

@@ -4,7 +4,7 @@
 
 Initial finalization on 2026-11-12 verified 28 -> 41 tests. Integration started
 from that clean 41-test main. No existing tests were removed or skipped.
-Final integration verification: **61/61 Python tests**, smoke test, 20-client
+Final integration verification: **62/62 Python tests**, smoke test, 20-client
 load test and JavaScript DOM-double checks passed. Real capture demo passed;
 TShark independently verified 373 packets and repeated DATA/ACK packet IDs.
 Import audit of 40 Python files found only
@@ -82,11 +82,14 @@ ordered outbox replay after a server restart, recipient application ACK loss,
 cross-account isolation and reuse of the previous session's UDP port.
 It does **not** prove browser rendering, browser security or file chooser behavior.
 
-The earlier environment could not initialize browser automation. In the integration
-attempt the runtime initialized, but the browser access host was unavailable and
-native fallback was stopped because the tool could not confidently determine the
-Windows browser URL for policy enforcement. No browser E2E pass is claimed.
-Complete these manual checks using the README account-mode commands:
+The first browser attempt was blocked by URL-confidence enforcement. A later real
+Windows Chrome retry passed localhost demo-mode login/roster, private/broadcast
+chat, native file chooser for empty/Unicode/binary files, SHA-256 receipts, chat
+during binary transfer, logout/relogin and demo reconnect after server restart.
+It also verified fixes for polling closing the dropdown and progress events
+evicting chat. See [evidence/browser-e2e.md](evidence/browser-e2e.md) for observations
+and hashes. The following broader **account-mode** / LAN checks remain manual
+using the README account-mode commands:
 
 - [ ] Configure browser trust for the locally generated certificate (or use an
       already trusted certificate). Open both HTTPS UI ports with no TLS error.
