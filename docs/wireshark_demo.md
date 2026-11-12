@@ -1,5 +1,38 @@
 # Real packet capture demonstration
 
+## Pre-report audit capture (2026-11-12)
+
+A separate new capture is at
+`evidence/final-audit-2026-11-12/final-loopback.pcapng`; the original capture below
+is unchanged. The existing demo server occupied 9100/9101, so this audit ran
+`python -m scripts.wireshark_demo --tcp-port 19100 --udp-port 19101` with an Npcap
+loopback filter restricted to `tcp port 19100 or udp port 19101`.
+
+TShark 4.6.9 verified **389 frames: 178 TCP, 211 UDP, 70 TLS frames**. UDP contains
+106 DATA and 105 ACK frames; dumpcap reported 389 received / 0 dropped. SYN/SYN-ACK
+start at 1/2, with post-restart sessions at 306/307 and 335/336. Frames **109 and
+120** contain byte-identical DATA (UUID `82bc661c-2bf6-4a47-83e5-490095401c5a`,
+sequence 0); frame **121** is its 42-byte transport ACK. File stream
+`259968a9-abbd-4471-a6a7-9d3eb4659705` spans sequences 0 through 42.
+
+```text
+tcp.port == 19100 || udp.port == 19101
+udp.payload[10:16] == 82:bc:66:1c:2b:f6:4a:47:83:e5:49:00:95:40:1c:5a
+udp.payload[26:16] == 25:99:68:a9:ab:bd:44:71:a6:a7:9d:3e:b4:65:97:05
+```
+
+SHA-256: `e9acddbab2bba4ddf4a7d79240d31ebf7f7a46bb4c63823de2f54a63b3ff75f4`.
+`capture-analysis.json`, `wireshark-run.txt` and `dumpcap.txt` in the same evidence
+directory record the independent analysis and live run. PowerShell decorates
+dumpcap's stderr progress as NativeCommandError text; the completed capture and
+TShark analysis confirm the packets and zero interface drops.
+
+No TCP retransmission was observed. This repeated UDP DATA is application-layer
+retransmission. Transport ACK has no encrypted payload; CHAT_ACK and FILE_RECEIPT
+are application messages inside encrypted DATA. Their semantic success is checked
+by the demo, not read as plaintext in Wireshark. Neither capture contains a pcapng
+Decryption Secrets Block; no AES/TLS private key was exported.
+
 ## Captured evidence (2026-11-12)
 
 Open `evidence/captures/integration-loopback.pcapng` in Wireshark. This is an

@@ -174,8 +174,15 @@ password errors, certificate validation, logout/relogin, revoked tokens, empty/
 text/binary files, SHA-256, disconnect/timeout cleanup, malformed messages,
 loss/duplicates/reordering, and chat during file transfer. The load script keeps
 20 clients connected. The JavaScript test uses a DOM double, not a real browser.
-Real Chrome demo-mode verification is recorded in `docs/evidence/browser-e2e.md`;
-see `docs/test_plan.md` for remaining account/HTTPS browser and LAN checks.
+Real Chrome demo-mode verification is recorded in `docs/evidence/browser-e2e.md`.
+Trusted HTTPS account registration/login, logout, restart/outbox replay and
+isolation passed the follow-up in
+`docs/evidence/final-audit-2026-11-12/browser-account-e2e.md`.
+See `docs/test_plan.md` for remaining permutations and LAN checks.
+
+The latest pre-report verification is summarized in `docs/final_audit.md`:
+65 Python tests plus smoke/load/UI checks passed, and the remaining trusted HTTPS
+broadcast/empty/binary/concurrent-chat browser cases passed on 2026-11-13.
 
 ## 5. Team ownership and readable folders
 
@@ -222,10 +229,12 @@ changes must be agreed before merging. Keep changes on separate Git branches.
 - New clients use message IDs and recipient application ACKs for chat delivery.
   Legacy CHAT messages remain routable but have no outbox delivery guarantee.
   File success still needs FILE_RECEIPT after receiver SHA-256 verification.
-- Real Windows Chrome verified localhost demo login, chat, file chooser/receipts,
-  chat during binary transfer, logout/relogin and server restart. Browser
-  account/HTTPS registration and certificate trust, LAN, very large files and
-  long-running tests remain manual checks. See `docs/evidence/browser-e2e.md`.
+- Real Windows Chrome verified localhost demo chat/files and trusted HTTPS account
+  registration/login/logout, Unicode file, restart/reauthentication, ordered
+  pending replay and account isolation. Both account origins had empty Local and
+  Session Storage after testing. Account empty/text/binary uploads and chat during
+  a 2 MiB transfer are verified. LAN, very large files and long-duration runs
+  remain manual checks. See `docs/final_audit.md` and its dated evidence links.
   BBR/CUBIC remains unimplemented.
 - The browser UI uses a raw-socket localhost HTTP adapter; do not expose it to the Internet.
 - Original project statement says individual/pair, while this allocation has

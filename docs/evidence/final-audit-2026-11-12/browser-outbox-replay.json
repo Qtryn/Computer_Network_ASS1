@@ -1,0 +1,33 @@
+{
+  "before_restart": [
+    {
+      "message_id": "5c011462-6dc1-43f4-af72-dff2f77e0bb8",
+      "text": "HTTPS pending first 02",
+      "status": "PENDING"
+    },
+    {
+      "message_id": "3ea758ad-2f61-4880-8701-b9d442006724",
+      "text": "HTTPS pending second 03",
+      "status": "PENDING"
+    }
+  ],
+  "recipient_before_restart": [],
+  "other_account_isolated": true,
+  "after_restart_received": [
+    {
+      "message_id": "5c011462-6dc1-43f4-af72-dff2f77e0bb8",
+      "text": "HTTPS pending first 02"
+    },
+    {
+      "message_id": "3ea758ad-2f61-4880-8701-b9d442006724",
+      "text": "HTTPS pending second 03"
+    }
+  ],
+  "delivered_ids": [
+    "5c011462-6dc1-43f4-af72-dff2f77e0bb8",
+    "3ea758ad-2f61-4880-8701-b9d442006724"
+  ],
+  "outbox_after": [],
+  "fresh_ui_session": true,
+  "exact_order_and_once": true
+}

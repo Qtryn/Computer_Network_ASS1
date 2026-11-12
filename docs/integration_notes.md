@@ -9,7 +9,9 @@
   that server branch is already merged and was not merged again.
 - Selection was performed with reviewed diffs and targeted patches. There was
   no blind merge, conflict-marker resolution or history rewrite. The user later
-  authorized a local main merge after browser verification; no push is included.
+  authorized a local fast-forward main merge and then a push through `80c6f25`.
+  The later pre-report audit initially left its tests/docs/evidence uncommitted
+  and unpushed, as requested; the user then separately authorized publication.
 
 ## Selected and excluded changes
 
@@ -96,5 +98,19 @@ demo-mode login, private/broadcast chat, native file chooser, Unicode/empty/bina
 SHA-256 receipts, chat during transfer, logout/relogin and server restart. It found
 and fixed per-poll dropdown rebuilding and progress events evicting chat from the
 bounded event buffer. Added regressions passed with the full suite. Details and
-remaining account/HTTPS browser scope: [evidence/browser-e2e.md](evidence/browser-e2e.md).
+the original demo browser scope: [evidence/browser-e2e.md](evidence/browser-e2e.md).
 Imported Member 4 screenshots remain historical and are not final-run evidence.
+
+The later pre-report audit reran 62 baseline tests, added three real-socket/process
+audit tests and passed all 65. A separate trusted HTTPS Chrome follow-up passed
+account registration/login/throttling/logout, Unicode file, server restart,
+ordered pending replay and cross-account isolation. Browser storage was empty on
+both origins. See `evidence/final-audit-2026-11-12/README.md` and its browser record.
+No new application source defect or source change was required by that audit.
+
+Final verification on 2026-11-13 passed a fresh 65-test/smoke/load/UI run and the
+remaining real HTTPS account broadcast, empty/binary file and chat-during-transfer
+scenarios. `docs/final_audit.md` is the final audit summary; dated logs and prior
+capture/browser provenance remain under `docs/evidence/`. After verification,
+the user authorized committing and pushing the audit. LAN and BBR/CUBIC are not
+claimed as complete.

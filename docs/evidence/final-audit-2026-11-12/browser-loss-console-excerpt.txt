@@ -1,0 +1,149 @@
+Console output excerpt returned when stopping the fault-injected audit server.
+Warning: truncated output (original token count: 4740)
+Total output lines: 315
+
+DROP_CHAT packet=e4ff81f0-69f4-454d-8f46-bd64de2d5996 stream=6f6f2f5a-5ad3-ed7b-
+-14ae-593fc04343e0 sequence=2
+DROP_CHAT packet=9b2e5bd7-8d5a-48df-bf2d-ba9960bf8e51 stream=6f6f2f5a-5ad3-ed7b-
+-14ae-593fc04343e0 sequence=3
+DROP_CHAT packet=1ba9a0e4-4673-4e17-b993-1488880c14a9 stream=6f6f2f5a-5ad3-ed7b-
+-14ae-593fc04343e0 sequence=4
+DROP_CHAT packet=e141277a-1b0b-49b3-955c-f4a659adf862 stream=6f6f2f5a-5ad3-ed7b-
+-14ae-593fc04343e0 sequence=5
+DROP_CHAT packet=e4ff81f0-69f4-454d-8f46-bd64de2d5996 stream=6f6f2f5a-5ad3-ed7b-
+-14ae-593fc04343e0 sequence=2
+DROP_CHAT packet=9b2e5bd7-8d5a-48df-bf2d-ba9960bf8e51 stream=6f6f2f5a-5ad3-ed7b-
+-14ae-593fc04343e0 sequence=3
+DROP_CHAT packet=1ba9a0e4-4673-4e17-b993-1488880c14a9 stream=6f6f2f5a-5ad3-ed7b-
+-14ae-593fc04343e0 sequence=4
+DROP_CHAT packet=e141277a-1b0b-49b3-955c-f4a659adf862 stream=6f6f2f5a-5ad3-ed7b-
+-14ae-593fc04343e0 sequence=5
+DROP_CHAT packet=e4ff81f0-69f4-454d-8f46-bd64de2d5996 stream=6f6f2f5a-5ad3-ed7b-
+-14ae-593fc04343e0 sequence=2
+DROP_CHAT packet=9b2e5bd7-8d5a-48df-bf2d-ba9960bf8e51 stream=6f6f2f5a-5ad3-ed7b-
+-14ae-593fc04343e0 sequence=3
+DROP_CHAT packet=1ba9a0e4-4673-4e17-b993-1488880c14a9 stream=6f6f2f5a-5ad3-ed7b-
+-14ae-593fc04343e0 sequence=4
+DROP_CHAT packet=e141277a-1b0b-49b3-955c-f4a659adf862 stream=6f6f2f5a-5ad3-ed7b-
+-14ae-593fc04343e0 sequence=5
+DROP_CHAT packet=e4ff81f0-69f4-454d-8f46-bd64de2d5996 stream=6f6f2f5a-5ad3-ed7b-
+-14ae-593fc04343e0 sequence=2
+DROP_CHAT packet=9b2e5bd7-8d5a-48df-bf2d-ba9960bf8e51 stream=6f6f2f5a-5ad3-ed7b-
+-14ae-593fc04343e0 sequence=3
+DROP_CHAT packet=1ba9a0e4-4673-4e17-b993-1488880c14a9 stream=6f6f2f5a-5ad3-ed7b-
+-14ae-593fc04343e0 sequence=4
+DROP_CHAT packet=e141277a-1b0b-49b3-955c-f4a659adf862 stream=6f6f2f5a-5ad3-ed7b-
+-14ae-593fc04343e0 sequence=5
+DROP_CHAT packet=e4ff81f0-69f4-454d-8f46-bd64de2d5996 stream=6f6f2f5a-5ad3-ed7b-
+-14ae-593fc04343e0 sequence=2
+DROP_CHAT packet=9b2e5bd7-8d5a-48df-bf2d-ba9960bf8e51 stream=6f6f2f5a-5ad3-ed7b-
+-14ae-593fc04343e0 sequence=3
+DROP_CHAT packet=1ba9a0e4-4673-4e17-b993-1488880c14a9 stream=6f6f2f5a-5ad3-ed7b-
+-14ae-593fc04343e0 sequence=4
+DROP_CHAT packet=e141277a-1b0b-49b3-955c-f4a659adf862 stream=6f6f2f5a-5ad3-ed7b-
+-14ae-593fc04343e0 sequence=5
+DROP_CHAT packet=e4ff81f0-69f4-454d-8f46-bd64de2d5996 stream=6f6f2f5a-5ad3-ed7b-
+-14ae-593fc04343e0 sequence=2
+DROP_CHAT packet=9b2e5bd7-8d5a-48df-bf2d-ba9960bf8e51 stream=6f6f2f5a-5ad3-ed7b-
+-14ae-593fc04343e0 sequence=3
+DROP_CHAT packet=1ba9a0e4-4673-4e17-b993-1488880c14a9 stream=6f6f2f5a-5ad3-ed7b-
+-14ae-593fc04343e0 sequence=4
+DROP_CHAT packet=e141277a-1b0b-49b3-955c-f4a659adf862 stream=6f6f2f5a-5ad3-ed7b-
+-14ae-593fc04343e0 sequence=5
+DROP_CHAT packet=e4ff81f0-69f4-454d-8f46-bd64de2d5996 stream=6f6f2f5a-5ad3-ed7b-
+-14ae-593fc04343e0 sequence=2
+DROP_CHAT packet=9b2e5bd7-8d5a-48df-bf2d-ba9960bf8e51 stream=6f6f2f5a-5ad3-ed7b-
+-14ae-593fc04343e0 sequence=3
+DROP_CHAT packet=1ba9a0e4-4673-4e17-b993-1488880c14a9 stream=6f6f2f5a-5ad3-ed7b-
+-14ae-593fc04343e0 sequence=4
+DROP_CHAT packet=e141277a-1b0b-49b3-955c-f4a659adf862 stream=6f6f2f5a-5ad3-ed7b-
+-14ae-593fc04343e0 sequence=5
+DROP_CHAT packet=e4ff81f0-69f4-454d-8f46-bd64de2d5996 stream=6f6f2f5a-5ad3-ed7b-
+-14ae-593fc04343e0 sequence=2
+DROP_CHAT packet=9b2e5bd7-8d5a-48df-bf2d-ba9960bf8e51 stream=6f6f2f5a-5ad3-ed7b-
+-14ae-593fc04343e0 sequence=3
+DROP_CHAT packet=1ba9a0e4-4673-4e17-b993-1488880c14a9 stream=6f6f2f5a-5ad3-ed7b-
+-14ae-593fc04343e0 sequence=4
+DROP_CHAT packet=e141277a-1b0b-49b3-955c-f4a659adf862 stream=6f6f2f5a-5ad3-ed7b-
+-14ae-593fc04343e0 sequence=5
+DROP_CHAT packet=e4ff81f0-69f4-454d-8f46-bd64de2d5996 stream=6f6f2f5a-5ad3-ed7b-
+-14ae-593fc04343e0 sequence=2
+DROP_CHAT packet=9b2e5bd7-8d5a-48df-bf2d-ba9960bf8e51 stream=6f6f2f5a-5ad3-ed7b-
+-14ae-593fc04343e0 sequence=3
+DROP_CHAT packet=1ba9a0e4-4673-4e17-b993-1488880c14a9 stream=6f6f2f5a-5ad3-ed7b-
+-14ae-593fc04343e0 sequence=4
+DROP_CHAT packet=e141277a-1b0b-49b3-955c-f4a659adf862 stream=6f6f2f5a-5ad3-ed7b-
+-14ae-593fc04343e0 sequence=5
+DROP_CHAT packet=e4ff81f0-69f4-454d-8f46-bd6…2540 tokens truncated…f46-bd64de2d5996 stream=6f6f2f5a-5ad3-ed7b-
+-14ae-593fc04343e0 sequence=2
+DROP_CHAT packet=9b2e5bd7-8d5a-48df-bf2d-ba9960bf8e51 stream=6f6f2f5a-5ad3-ed7b-
+-14ae-593fc04343e0 sequence=3
+DROP_CHAT packet=1ba9a0e4-4673-4e17-b993-1488880c14a9 stream=6f6f2f5a-5ad3-ed7b-
+-14ae-593fc04343e0 sequence=4
+DROP_CHAT packet=e141277a-1b0b-49b3-955c-f4a659adf862 stream=6f6f2f5a-5ad3-ed7b-
+-14ae-593fc04343e0 sequence=5
+DROP_CHAT packet=e4ff81f0-69f4-454d-8f46-bd64de2d5996 stream=6f6f2f5a-5ad3-ed7b-
+-14ae-593fc04343e0 sequence=2
+DROP_CHAT packet=9b2e5bd7-8d5a-48df-bf2d-ba9960bf8e51 stream=6f6f2f5a-5ad3-ed7b-
+-14ae-593fc04343e0 sequence=3
+DROP_CHAT packet=1ba9a0e4-4673-4e17-b993-1488880c14a9 stream=6f6f2f5a-5ad3-ed7b-
+-14ae-593fc04343e0 sequence=4
+DROP_CHAT packet=e141277a-1b0b-49b3-955c-f4a659adf862 stream=6f6f2f5a-5ad3-ed7b-
+-14ae-593fc04343e0 sequence=5
+DROP_CHAT packet=e4ff81f0-69f4-454d-8f46-bd64de2d5996 stream=6f6f2f5a-5ad3-ed7b-
+-14ae-593fc04343e0 sequence=2
+DROP_CHAT packet=9b2e5bd7-8d5a-48df-bf2d-ba9960bf8e51 stream=6f6f2f5a-5ad3-ed7b-
+-14ae-593fc04343e0 sequence=3
+DROP_CHAT packet=1ba9a0e4-4673-4e17-b993-1488880c14a9 stream=6f6f2f5a-5ad3-ed7b-
+-14ae-593fc04343e0 sequence=4
+DROP_CHAT packet=e141277a-1b0b-49b3-955c-f4a659adf862 stream=6f6f2f5a-5ad3-ed7b-
+-14ae-593fc04343e0 sequence=5
+DROP_CHAT packet=e4ff81f0-69f4-454d-8f46-bd64de2d5996 stream=6f6f2f5a-5ad3-ed7b-
+-14ae-593fc04343e0 sequence=2
+DROP_CHAT packet=9b2e5bd7-8d5a-48df-bf2d-ba9960bf8e51 stream=6f6f2f5a-5ad3-ed7b-
+-14ae-593fc04343e0 sequence=3
+DROP_CHAT packet=1ba9a0e4-4673-4e17-b993-1488880c14a9 stream=6f6f2f5a-5ad3-ed7b-
+-14ae-593fc04343e0 sequence=4
+DROP_CHAT packet=e141277a-1b0b-49b3-955c-f4a659adf862 stream=6f6f2f5a-5ad3-ed7b-
+-14ae-593fc04343e0 sequence=5
+DROP_CHAT packet=e4ff81f0-69f4-454d-8f46-bd64de2d5996 stream=6f6f2f5a-5ad3-ed7b-
+-14ae-593fc04343e0 sequence=2
+DROP_CHAT packet=9b2e5bd7-8d5a-48df-bf2d-ba9960bf8e51 stream=6f6f2f5a-5ad3-ed7b-
+-14ae-593fc04343e0 sequence=3
+DROP_CHAT packet=1ba9a0e4-4673-4e17-b993-1488880c14a9 stream=6f6f2f5a-5ad3-ed7b-
+-14ae-593fc04343e0 sequence=4
+DROP_CHAT packet=e141277a-1b0b-49b3-955c-f4a659adf862 stream=6f6f2f5a-5ad3-ed7b-
+-14ae-593fc04343e0 sequence=5
+DROP_CHAT packet=e4ff81f0-69f4-454d-8f46-bd64de2d5996 stream=6f6f2f5a-5ad3-ed7b-
+-14ae-593fc04343e0 sequence=2
+DROP_CHAT packet=9b2e5bd7-8d5a-48df-bf2d-ba9960bf8e51 stream=6f6f2f5a-5ad3-ed7b-
+-14ae-593fc04343e0 sequence=3
+DROP_CHAT packet=1ba9a0e4-4673-4e17-b993-1488880c14a9 stream=6f6f2f5a-5ad3-ed7b-
+-14ae-593fc04343e0 sequence=4
+DROP_CHAT packet=e141277a-1b0b-49b3-955c-f4a659adf862 stream=6f6f2f5a-5ad3-ed7b-
+-14ae-593fc04343e0 sequence=5
+DROP_CHAT packet=e4ff81f0-69f4-454d-8f46-bd64de2d5996 stream=6f6f2f5a-5ad3-ed7b-
+-14ae-593fc04343e0 sequence=2
+DROP_CHAT packet=9b2e5bd7-8d5a-48df-bf2d-ba9960bf8e51 stream=6f6f2f5a-5ad3-ed7b-
+-14ae-593fc04343e0 sequence=3
+DROP_CHAT packet=1ba9a0e4-4673-4e17-b993-1488880c14a9 stream=6f6f2f5a-5ad3-ed7b-
+-14ae-593fc04343e0 sequence=4
+DROP_CHAT packet=e141277a-1b0b-49b3-955c-f4a659adf862 stream=6f6f2f5a-5ad3-ed7b-
+-14ae-593fc04343e0 sequence=5
+DROP_CHAT packet=e4ff81f0-69f4-454d-8f46-bd64de2d5996 stream=6f6f2f5a-5ad3-ed7b-
+-14ae-593fc04343e0 sequence=2
+DROP_CHAT packet=9b2e5bd7-8d5a-48df-bf2d-ba9960bf8e51 stream=6f6f2f5a-5ad3-ed7b-
+-14ae-593fc04343e0 sequence=3
+DROP_CHAT packet=1ba9a0e4-4673-4e17-b993-1488880c14a9 stream=6f6f2f5a-5ad3-ed7b-
+-14ae-593fc04343e0 sequence=4
+DROP_CHAT packet=e141277a-1b0b-49b3-955c-f4a659adf862 stream=6f6f2f5a-5ad3-ed7b-
+-14ae-593fc04343e0 sequence=5
+DROP_CHAT packet=e4ff81f0-69f4-454d-8f46-bd64de2d5996 stream=6f6f2f5a-5ad3-ed7b-
+-14ae-593fc04343e0 sequence=2
+DROP_CHAT packet=9b2e5bd7-8d5a-48df-bf2d-ba9960bf8e51 stream=6f6f2f5a-5ad3-ed7b-
+-14ae-593fc04343e0 sequence=3
+DROP_CHAT packet=1ba9a0e4-4673-4e17-b993-1488880c14a9 stream=6f6f2f5a-5ad3-ed7b-
+-14ae-593fc04343e0 sequence=4
+DROP_CHAT packet=e141277a-1b0b-49b3-955c-f4a659adf862 stream=6f6f2f5a-5ad3-ed7b-
+-14ae-593fc04343e0 sequence=5
+[server] test_bob disconnected[server] test_alice disconnected

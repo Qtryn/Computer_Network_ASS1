@@ -1,0 +1,311 @@
+test_chat_from_another_user_is_kept (test_client.ClientEventTests.test_chat_from_another_user_is_kept) ... ok
+test_file_progress_cannot_evict_chat_between_browser_polls (test_client.ClientEventTests.test_file_progress_cannot_evict_chat_between_browser_polls) ... ok
+test_logged_out_client_does_not_emit_events (test_client.ClientEventTests.test_logged_out_client_does_not_emit_events) ... ok
+test_server_echo_of_own_chat_is_ignored (test_client.ClientEventTests.test_server_echo_of_own_chat_is_ignored) ... ok
+test_udp_before_successful_login_is_not_displayed (test_client.ClientEventTests.test_udp_before_successful_login_is_not_displayed) ... ok
+test_abrupt_tcp_loss_closes_udp_and_clears_history (test_client_sessions.ClientSessionTests.test_abrupt_tcp_loss_closes_udp_and_clears_history) ... ok
+test_bad_http_json_offline_recipient_and_network_error (test_client_sessions.ClientSessionTests.test_bad_http_json_offline_recipient_and_network_error) ... ok
+test_disconnect_and_timeout_cleanup_leave_other_transfers_intact (test_client_sessions.ClientSessionTests.test_disconnect_and_timeout_cleanup_leave_other_transfers_intact) ... ok
+test_disconnected_state_never_exposes_events_during_cleanup (test_client_sessions.ClientSessionTests.test_disconnected_state_never_exposes_events_during_cleanup) ... ok
+test_http_login_chat_file_logout_relogin_and_revoked_token (test_client_sessions.ClientSessionTests.test_http_login_chat_file_logout_relogin_and_revoked_token) ... ok
+test_partial_file_timeout_preserves_completed_file (test_client_sessions.ClientSessionTests.test_partial_file_timeout_preserves_completed_file) ... ok
+test_receiver_disconnect_aborts_sender_transfer (test_client_sessions.ClientSessionTests.test_receiver_disconnect_aborts_sender_transfer) ... ok
+test_tls_password_login_http_errors_and_certificate_validation (test_client_sessions.ClientSessionTests.test_tls_password_login_http_errors_and_certificate_validation) ... ok
+test_broadcast_and_private_routing (test_features.ChatTests.test_broadcast_and_private_routing) ... ok
+test_chat_validation (test_features.ChatTests.test_chat_validation) ... ok
+test_binary_file_many_chunks (test_features.FileTests.test_binary_file_many_chunks) ... ok
+test_corrupt_file_rejected (test_features.FileTests.test_corrupt_file_rejected) ... ok
+test_custom_chunk_size (test_features.FileTests.test_custom_chunk_size) ... ok
+test_empty_file (test_features.FileTests.test_empty_file) ... ok
+test_filename_safety (test_features.FileTests.test_filename_safety) ... ok
+test_utf8_content (test_features.FileTests.test_utf8_content) ... ok
+test_closing_local_process_discards_ram_outbox (test_final_audit.FinalAuditTests.test_closing_local_process_discards_ram_outbox) ... ok
+test_concurrent_chat_files_logout_and_resource_cleanup (test_final_audit.FinalAuditTests.test_concurrent_chat_files_logout_and_resource_cleanup) ... ok
+test_reused_chat_id_with_changed_content_is_rejected (test_final_audit.FinalAuditTests.test_reused_chat_id_with_changed_content_is_rejected) ... ok
+test_invalid_login_body_returns_error (test_local_web.LocalWebLoginTests.test_invalid_login_body_returns_error) ... ok
+test_login_from_ui_and_state (test_local_web.LocalWebLoginTests.test_login_from_ui_and_state) ... ok
+test_logout_closes_client_and_returns_to_unauthenticated_state (test_local_web.LocalWebLoginTests.test_logout_closes_client_and_returns_to_unauthenticated_state) ... ok
+test_successful_chat_with_none_return_is_not_reported_as_error (test_local_web.LocalWebLoginTests.test_successful_chat_with_none_return_is_not_reported_as_error) ... ok
+test_ui_login_connects_to_real_collaboration_server (test_local_web.LocalWebLoginTests.test_ui_login_connects_to_real_collaboration_server) ... ok
+test_file_hash_matches_and_chat_continues_under_loss (test_lossy_network.EndToEndLossyFileTests.test_file_hash_matches_and_chat_continues_under_loss) ... ok
+test_chat_stream_progresses_while_lossy_file_stream_is_slow (test_lossy_network.TransportUnderFaultsTests.test_chat_stream_progresses_while_lossy_file_stream_is_slow) ... ok
+test_corrupted_packets_are_never_delivered (test_lossy_network.TransportUnderFaultsTests.test_corrupted_packets_are_never_delivered) ... ok
+test_in_order_exactly_once_under_loss_dup_reorder (test_lossy_network.TransportUnderFaultsTests.test_in_order_exactly_once_under_loss_dup_reorder) ... ok
+test_retry_budget_exhausted_raises_clear_error (test_lossy_network.TransportUnderFaultsTests.test_retry_budget_exhausted_raises_clear_error) ... ok
+test_accepted_chat_text_always_fits_one_datagram (test_packet_budget.ChatPacketBudgetTests.test_accepted_chat_text_always_fits_one_datagram) ... ok
+test_escaped_text_at_datagram_boundary (test_packet_budget.ChatPacketBudgetTests.test_escaped_text_at_datagram_boundary) ... ok
+test_file_start_with_longest_multibyte_name_fits (test_packet_budget.FilePacketBudgetTests.test_file_start_with_longest_multibyte_name_fits) ... ok
+test_fixed_overheads (test_packet_budget.FilePacketBudgetTests.test_fixed_overheads) ... ok
+test_full_chunk_with_worst_case_metadata_fits (test_packet_budget.FilePacketBudgetTests.test_full_chunk_with_worst_case_metadata_fits) ... ok
+test_real_packets_of_a_file_all_fit (test_packet_budget.FilePacketBudgetTests.test_real_packets_of_a_file_all_fit) ... ok
+test_aes_gcm_tamper_detected (test_protocol_security.ProtocolTests.test_aes_gcm_tamper_detected) ... ok
+test_frame (test_protocol_security.ProtocolTests.test_frame) ... ok
+test_round_trip_with_raw_file_bytes (test_protocol_security.ProtocolTests.test_round_trip_with_raw_file_bytes) ... ok
+test_demo_auto_reconnect_uses_backoff_and_explicit_logout_stops_it (test_registration_outbox.RegistrationOutboxTests.test_demo_auto_reconnect_uses_backoff_and_explicit_logout_stops_it) ... ok
+test_https_registration_login_duplicate_validation_and_restart_persistence (test_registration_outbox.RegistrationOutboxTests.test_https_registration_login_duplicate_validation_and_restart_persistence) ... ok
+test_pending_outbox_hidden_from_another_account_and_resumed_by_owner (test_registration_outbox.RegistrationOutboxTests.test_pending_outbox_hidden_from_another_account_and_resumed_by_owner) ... ok
+test_recipient_deduplicates_after_server_restart_and_lost_application_ack (test_registration_outbox.RegistrationOutboxTests.test_recipient_deduplicates_after_server_restart_and_lost_application_ack) ... ok
+test_registration_is_thread_safe_and_atomic_on_write_failure (test_registration_outbox.RegistrationOutboxTests.test_registration_is_thread_safe_and_atomic_on_write_failure) ... ok
+test_registration_rejects_insecure_transport (test_registration_outbox.RegistrationOutboxTests.test_registration_rejects_insecure_transport) ... ok
+test_relogin_reusing_udp_port_has_fresh_sequences_and_rejects_old_chat (test_registration_outbox.RegistrationOutboxTests.test_relogin_reusing_udp_port_has_fresh_sequences_and_rejects_old_chat) ... ok
+test_server_restart_requires_account_login_and_replays_ordered_outbox (test_registration_outbox.RegistrationOutboxTests.test_server_restart_requires_account_login_and_replays_ordered_outbox) ... ok
+test_stable_message_id_and_targets_are_included_in_budget (test_registration_outbox.RegistrationOutboxTests.test_stable_message_id_and_targets_are_included_in_budget) ... ok
+test_transport_ack_is_not_delivery_and_wrong_receiver_cannot_confirm (test_registration_outbox.RegistrationOutboxTests.test_transport_ack_is_not_delivery_and_wrong_receiver_cannot_confirm) ... ok
+test_unicode_filename_and_chat_work_through_integrated_http (test_registration_outbox.RegistrationOutboxTests.test_unicode_filename_and_chat_work_through_integrated_http) ... ok
+test_bad_connections_do_not_break_listener (test_server_control.ServerControlTests.test_bad_connections_do_not_break_listener) ... ok
+test_concurrent_logins_and_disconnect_cleanup (test_server_control.ServerControlTests.test_concurrent_logins_and_disconnect_cleanup) ... ok
+test_password_lock_survives_reconnect_and_session_expires (test_server_control.ServerControlTests.test_password_lock_survives_reconnect_and_session_expires) ... ok
+test_split_hello_and_coalesced_requests (test_server_control.ServerControlTests.test_split_hello_and_coalesced_requests) ... ok
+test_ack_socket_error_does_not_drop_accepted_packet (test_transport.TransportTests.test_ack_socket_error_does_not_drop_accepted_packet) ... ok
+test_distinct_streams_do_not_block_each_other (test_transport.TransportTests.test_distinct_streams_do_not_block_each_other) ... ok
+test_dropped_first_packet_is_retransmitted_and_delivered_in_order (test_transport.TransportTests.test_dropped_first_packet_is_retransmitted_and_delivered_in_order) ... ok
+test_invalid_oversized_and_malformed_udp_do_not_stop_listener (test_transport.TransportTests.test_invalid_oversized_and_malformed_udp_do_not_stop_listener) ... ok
+test_lost_all_acks_recovers_without_duplicate_delivery (test_transport.TransportTests.test_lost_all_acks_recovers_without_duplicate_delivery) ... ok
+test_oversized_message_does_not_consume_sequence (test_transport.TransportTests.test_oversized_message_does_not_consume_sequence) ... ok
+test_retry_exhaustion_recovers_gap_and_ignores_late_duplicates (test_transport.TransportTests.test_retry_exhaustion_recovers_gap_and_ignores_late_duplicates) ... ok
+
+----------------------------------------------------------------------
+Ran 65 tests in 41.368s
+
+OK
+[server] TCP ('127.0.0.1', 54322) | UDP 127.0.0.1:63417
+[server] alice logged in from ('127.0.0.1', 63418)
+[server] alice disconnected
+[server] TCP ('127.0.0.1', 54324) | UDP 127.0.0.1:63419
+[server] alice logged in from ('127.0.0.1', 63420)
+[server] alice disconnected
+[server] TCP ('127.0.0.1', 54334) | UDP 127.0.0.1:63421
+[server] alice logged in from ('127.0.0.1', 63422)
+[server] bob logged in from ('127.0.0.1', 63423)
+[server] charlie logged in from ('127.0.0.1', 63424)
+[server] alice disconnected
+[server] charlie disconnected
+[server] bob disconnected
+[server] TCP ('127.0.0.1', 63680) | UDP 127.0.0.1:64267
+[server] alice logged in from ('127.0.0.1', 64268)
+[server] alice disconnected
+[server] TCP ('127.0.0.1', 63682) | UDP 127.0.0.1:64269
+[server] bob logged in from ('127.0.0.1', 64270)
+[server] alice logged in from ('127.0.0.1', 64271)
+[server] alice disconnected
+[server] alice logged in from ('127.0.0.1', 64272)
+[server] alice disconnected
+[server] bob disconnected
+[server] TCP ('127.0.0.1', 56105) | UDP 127.0.0.1:58356
+[server] alice logged in from ('127.0.0.1', 58357)
+[server] bob logged in from ('127.0.0.1', 58358)
+[server] bob disconnected
+[server] alice disconnected
+[server] TCP ('127.0.0.1', 51309) | UDP 127.0.0.1:58359
+[server] alice logged in from ('127.0.0.1', 58942)
+[server] bob logged in from ('127.0.0.1', 58943)
+[server] bob disconnected
+[server] alice disconnected
+[server] TCP ('127.0.0.1', 62923) | UDP 127.0.0.1:63977
+[server] audit_owner logged in from ('127.0.0.1', 63978)
+[server] audit_owner disconnected
+[server] audit_owner logged in from ('127.0.0.1', 63979)
+[final audit] local process restart loses RAM-only pending message as documented
+[server] audit_owner disconnected
+[server] TCP ('127.0.0.1', 52361) | UDP 127.0.0.1:63308
+[server] audit00 logged in from ('127.0.0.1', 63309)
+[server] audit01 logged in from ('127.0.0.1', 63310)
+[server] audit00 disconnected
+[server] audit01 disconnected
+[final audit] 2 concurrent clients: global/private chat, 1 files with SHA-256, logout/metadata/socket cleanup PASS
+[server] TCP ('127.0.0.1', 52364) | UDP 127.0.0.1:63311
+[server] audit01 logged in from ('127.0.0.1', 63313)
+[server] audit02 logged in from ('127.0.0.1', 63314)
+[server] audit00 logged in from ('127.0.0.1', 63312)
+[server] audit05 logged in from ('127.0.0.1', 63316)
+[server] audit04 logged in from ('127.0.0.1', 63317)
+[server] audit03 logged in from ('127.0.0.1', 63315)
+[server] audit07 logged in from ('127.0.0.1', 63318)
+[server] audit06 logged in from ('127.0.0.1', 63319)
+[server] audit08 logged in from ('127.0.0.1', 63320)
+[server] audit09 logged in from ('127.0.0.1', 63321)
+[server] audit07 disconnected
+[server] audit00 disconnected
+[server] audit04 disconnected
+[server] audit03 disconnected
+[server] audit02 disconnected
+[server] audit06 disconnected
+[server] audit05 disconnected
+[server] audit01 disconnected
+[server] audit09 disconnected
+[server] audit08 disconnected
+[final audit] 10 concurrent clients: global/private chat, 5 files with SHA-256, logout/metadata/socket cleanup PASS
+[server] TCP ('127.0.0.1', 57789) | UDP 127.0.0.1:62809
+[server] audit00 logged in from ('127.0.0.1', 62810)
+[server] audit01 logged in from ('127.0.0.1', 62811)
+[server] audit02 logged in from ('127.0.0.1', 62812)
+[server] audit06 logged in from ('127.0.0.1', 62817)
+[server] audit03 logged in from ('127.0.0.1', 62813)
+[server] audit04 logged in from ('127.0.0.1', 62824)
+[server] audit05 logged in from ('127.0.0.1', 62815)
+[server] audit07 logged in from ('127.0.0.1', 62816)
+[server] audit11 logged in from ('127.0.0.1', 62827)
+[server] audit08 logged in from ('127.0.0.1', 62814)
+[server] audit14 logged in from ('127.0.0.1', 62826)
+[server] audit15 logged in from ('127.0.0.1', 62825)
+[server] audit10 logged in from ('127.0.0.1', 62828)
+[server] audit16 logged in from ('127.0.0.1', 62830)
+[server] audit09 logged in from ('127.0.0.1', 62829)
+[server] audit19 logged in from ('127.0.0.1', 62832)
+[server] audit12 logged in from ('127.0.0.1', 62834)
+[server] audit17 logged in from ('127.0.0.1', 62833)
+[server] audit13 logged in from ('127.0.0.1', 62831)
+[server] audit18 logged in from ('127.0.0.1', 62835)
+[server] audit00 disconnected
+[server] audit01 disconnected
+[server] audit11 disconnected
+[server] audit06 disconnected
+[server] audit15 disconnected
+[server] audit10 disconnected
+[server] audit03 disconnected
+[server] audit14 disconnected
+[server] audit04 disconnected
+[server] audit05 disconnected
+[server] audit08 disconnected
+[server] audit02 disconnected
+[server] audit07 disconnected
+[server] audit13 disconnected
+[server] audit18 disconnected
+[server] audit09 disconnected
+[server] audit19 disconnected
+[server] audit16 disconnected
+[server] audit12 disconnected
+[server] audit17 disconnected
+[final audit] 20 concurrent clients: global/private chat, 10 files with SHA-256, logout/metadata/socket cleanup PASS
+[server] TCP ('127.0.0.1', 56575) | UDP 127.0.0.1:60758
+[server] alice logged in from ('127.0.0.1', 60759)
+[server] bob logged in from ('127.0.0.1', 60760)
+[server] alice disconnected
+[server] bob disconnected
+[server] TCP ('127.0.0.1', 56578) | UDP 127.0.0.1:60761
+[server] alice logged in from ('127.0.0.1', 60762)
+[server] alice disconnected
+[server] TCP ('127.0.0.1', 58035) | UDP 127.0.0.1:60763
+[server] alice logged in from ('127.0.0.1', 60764)
+[server] bob logged in from ('127.0.0.1', 60765)
+[lossy e2e] server: {'sent': 214, 'dropped': 29, 'duplicated': 10, 'reordered': 16, 'corrupted': 0, 'delivered': 195}
+[lossy e2e] alice: {'sent': 110, 'dropped': 15, 'duplicated': 5, 'reordered': 10, 'corrupted': 0, 'delivered': 100}
+[lossy e2e] bob: {'sent': 103, 'dropped': 16, 'duplicated': 8, 'reordered': 6, 'corrupted': 0, 'delivered': 95}
+[server] alice disconnected
+[server] bob disconnected
+[budget] worst-case FILE_START = 698 B, headroom 502 B
+
+[budget] full FILE_CHUNK = 1085 B, headroom 115 B
+[server] TCP ('127.0.0.1', 61841) | UDP 127.0.0.1:51629
+[server] alice logged in from ('127.0.0.1', 51630)
+[server] alice disconnected
+[server] TCP ('127.0.0.1', 61841) | UDP 127.0.0.1:51629
+[server] alice logged in from ('127.0.0.1', 51631)
+[server] alice disconnected
+[server] TCP ('127.0.0.1', 62757) | UDP 127.0.0.1:53968
+[server] alice logged in from ('127.0.0.1', 53969)
+[server] alice disconnected
+[server] TCP ('127.0.0.1', 62757) | UDP 127.0.0.1:53968
+[server] alice logged in from ('127.0.0.1', 53970)
+[server] alice disconnected
+[server] TCP ('127.0.0.1', 51503) | UDP 127.0.0.1:51742
+[server] alice logged in from ('127.0.0.1', 51743)
+[server] bob logged in from ('127.0.0.1', 51744)
+[server] alice disconnected
+[server] charlie logged in from ('127.0.0.1', 49917)
+[server] charlie disconnected
+[server] alice logged in from ('127.0.0.1', 49918)
+[server] alice disconnected
+[server] bob disconnected
+[server] TCP ('127.0.0.1', 62240) | UDP 127.0.0.1:59489
+[server] alice logged in from ('127.0.0.1', 59490)
+[server] bob logged in from ('127.0.0.1', 59491)
+[server] bob disconnected
+[server] alice disconnected
+[server] TCP ('127.0.0.1', 62240) | UDP 127.0.0.1:59489
+[server] bob logged in from ('127.0.0.1', 59492)
+[server] alice logged in from ('127.0.0.1', 59493)
+[server] alice disconnected
+[server] bob disconnected
+[server] TCP ('127.0.0.1', 57197) | UDP 127.0.0.1:55907
+[server] TCP ('127.0.0.1', 57200) | UDP 127.0.0.1:55908
+[server] alice logged in from ('127.0.0.1', 55909)
+[server] bob logged in from ('127.0.0.1', 55910)
+[server] alice disconnected
+[server] alice logged in from ('127.0.0.1', 55909)
+[server] alice disconnected
+[server] bob disconnected
+[server] TCP ('127.0.0.1', 62402) | UDP 127.0.0.1:59889
+[server] alice logged in from ('127.0.0.1', 59890)
+[server] bob logged in from ('127.0.0.1', 61566)
+[server] alice disconnected
+[server] bob disconnected
+[server] TCP ('127.0.0.1', 62402) | UDP 127.0.0.1:59889
+[server] bob logged in from ('127.0.0.1', 61567)
+[server] alice logged in from ('127.0.0.1', 61568)
+[server] alice disconnected
+[server] bob disconnected
+[server] TCP ('127.0.0.1', 51532) | UDP 127.0.0.1:54570
+[server] alice logged in from ('127.0.0.1', 54571)
+[server] bob logged in from ('127.0.0.1', 54572)
+[server] charlie logged in from ('127.0.0.1', 56316)
+[server] charlie disconnected
+[server] bob disconnected
+[server] alice disconnected
+[server] TCP ('127.0.0.1', 56420) | UDP 127.0.0.1:56317
+[server] alice logged in from ('127.0.0.1', 56318)
+[server] bob logged in from ('127.0.0.1', 56319)
+[server] bob disconnected
+[server] alice disconnected
+[server] TCP ('127.0.0.1', 56427) | UDP 127.0.0.1:56320
+[server] TCP ('127.0.0.1', 56434) | UDP 127.0.0.1:56321
+[server] user01 logged in from ('127.0.0.1', 45001)
+[server] user00 logged in from ('127.0.0.1', 45000)
+[server] user02 logged in from ('127.0.0.1', 45002)
+[server] user03 logged in from ('127.0.0.1', 45003)
+[server] user04 logged in from ('127.0.0.1', 45004)
+[server] user05 logged in from ('127.0.0.1', 45005)
+[server] user06 logged in from ('127.0.0.1', 45006)
+[server] user07 logged in from ('127.0.0.1', 45007)
+[server] user08 logged in from ('127.0.0.1', 45008)
+[server] user09 logged in from ('127.0.0.1', 45009)
+[server] user11 logged in from ('127.0.0.1', 45011)
+[server] user12 logged in from ('127.0.0.1', 45012)
+[server] user10 logged in from ('127.0.0.1', 45010)
+[server] user14 logged in from ('127.0.0.1', 45014)
+[server] user13 logged in from ('127.0.0.1', 45013)
+[server] user16 logged in from ('127.0.0.1', 45016)
+[server] user15 logged in from ('127.0.0.1', 45015)
+[server] user17 logged in from ('127.0.0.1', 45017)
+[server] user18 logged in from ('127.0.0.1', 45018)
+[server] user19 logged in from ('127.0.0.1', 45019)
+[server] user19 disconnected
+[server] user00 disconnected
+[server] user01 disconnected
+[server] user02 disconnected
+[server] user03 disconnected
+[server] user04 disconnected
+[server] user05 disconnected
+[server] user06 disconnected
+[server] user07 disconnected
+[server] user08 disconnected
+[server] user09 disconnected
+[server] user11 disconnected
+[server] user12 disconnected
+[server] user10 disconnected
+[server] user14 disconnected
+[server] user13 disconnected
+[server] user16 disconnected
+[server] user15 disconnected
+[server] user17 disconnected
+[server] user18 disconnected
+[server] TCP ('127.0.0.1', 56457) | UDP 127.0.0.1:56322
+[server] alice logged in from ('127.0.0.1', 45000)
+[server] alice logged in from ('127.0.0.1', 45000)
+[server] alice disconnected
+[server] TCP ('127.0.0.1', 64063) | UDP 127.0.0.1:54364
+[server] alice logged in from ('127.0.0.1', 45000)
+[server] alice disconnected
+[transport] Ignored packet/error: OSError: simulated ACK send failure
+
+Exit=0 ElapsedSeconds=41.913

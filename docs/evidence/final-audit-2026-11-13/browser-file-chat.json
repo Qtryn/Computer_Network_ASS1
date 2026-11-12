@@ -1,0 +1,20 @@
+{
+  "date": "2026-11-13",
+  "broadcast_once": true,
+  "chat_during_binary_once": true,
+  "browser_observed_receiving_percent_when_chat_visible": 35,
+  "files": [
+    {
+      "name": "empty.txt",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "binary.bin",
+      "bytes": 2097152,
+      "sha256": "1e075c8d478ad21844e33e830a695ef03a4d2488b69ee275bd8947618bb1be1e"
+    }
+  ],
+  "recipient_receipt_ok": true,
+  "both_connected": true
+}

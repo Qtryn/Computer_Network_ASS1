@@ -1,0 +1,22 @@
+[
+  {
+    "check": "unittest",
+    "exit_code": 0,
+    "seconds": 43.584
+  },
+  {
+    "check": "smoke",
+    "exit_code": 0,
+    "seconds": 1.044
+  },
+  {
+    "check": "load",
+    "exit_code": 0,
+    "seconds": 2.659
+  },
+  {
+    "check": "ui",
+    "exit_code": 0,
+    "seconds": 0.213
+  }
+]

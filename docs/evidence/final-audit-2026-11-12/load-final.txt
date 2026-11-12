@@ -1,0 +1,44 @@
+[server] TCP ('127.0.0.1', 54278) | UDP 127.0.0.1:52011
+[server] user00 logged in from ('127.0.0.1', 52012)
+[server] user01 logged in from ('127.0.0.1', 52013)
+[server] user02 logged in from ('127.0.0.1', 52014)
+[server] user03 logged in from ('127.0.0.1', 52015)
+[server] user04 logged in from ('127.0.0.1', 52016)
+[server] user05 logged in from ('127.0.0.1', 52017)
+[server] user06 logged in from ('127.0.0.1', 52018)
+[server] user07 logged in from ('127.0.0.1', 51456)
+[server] user08 logged in from ('127.0.0.1', 51457)
+[server] user09 logged in from ('127.0.0.1', 51458)
+[server] user10 logged in from ('127.0.0.1', 51459)
+[server] user11 logged in from ('127.0.0.1', 51460)
+[server] user12 logged in from ('127.0.0.1', 51461)
+[server] user13 logged in from ('127.0.0.1', 51462)
+[server] user14 logged in from ('127.0.0.1', 51463)
+[server] user15 logged in from ('127.0.0.1', 51464)
+[server] user16 logged in from ('127.0.0.1', 51465)
+[server] user17 logged in from ('127.0.0.1', 51466)
+[server] user18 logged in from ('127.0.0.1', 51467)
+[server] user19 logged in from ('127.0.0.1', 51468)
+PASS: 20 concurrent clients, online list and private chat
+[server] user00 disconnected
+[server] user01 disconnected
+[server] user02 disconnected
+[server] user03 disconnected
+[server] user04 disconnected
+[server] user05 disconnected
+[server] user06 disconnected
+[server] user07 disconnected
+[server] user08 disconnected
+[server] user09 disconnected
+[server] user10 disconnected
+[server] user11 disconnected
+[server] user12 disconnected
+[server] user13 disconnected
+[server] user14 disconnected
+[server] user15 disconnected
+[server] user16 disconnected
+[server] user17 disconnected
+[server] user18 disconnected
+[server] user19 disconnected
+
+Exit=0 ElapsedSeconds=2.613

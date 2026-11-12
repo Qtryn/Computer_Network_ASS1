@@ -1,0 +1,2 @@
+PASS: actual control idle timeout 12s; EOF/removal after 12.093s; active heartbeat peer remained online
+PASS: server stop detected after 0.009s (includes server close); disconnected sending rejected

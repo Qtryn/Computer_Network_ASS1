@@ -1,0 +1,286 @@
+{
+  "python_files": 41,
+  "external": [
+    "cryptography"
+  ],
+  "imports": {
+    "json": [
+      "app\\client.py",
+      "app\\common\\protocol.py",
+      "app\\features\\outbox.py",
+      "app\\server\\auth.py",
+      "app\\server\\server.py",
+      "app\\web\\local_web.py",
+      "tests\\test_client_sessions.py",
+      "tests\\test_final_audit.py",
+      "tests\\test_local_web.py",
+      "tests\\test_registration_outbox.py",
+      "tests\\test_server_control.py"
+    ],
+    "select": [
+      "app\\client.py",
+      "tests\\test_server_control.py"
+    ],
+    "socket": [
+      "app\\client.py",
+      "app\\server\\server.py",
+      "app\\transport\\reliable_udp.py",
+      "app\\web\\local_web.py",
+      "tests\\test_client_sessions.py",
+      "tests\\test_final_audit.py",
+      "tests\\test_server_control.py"
+    ],
+    "ssl": [
+      "app\\client.py",
+      "app\\run_client.py",
+      "app\\run_server.py",
+      "app\\web\\local_web.py",
+      "scripts\\wireshark_demo.py",
+      "tests\\test_client_sessions.py",
+      "tests\\test_server_control.py"
+    ],
+    "threading": [
+      "app\\client.py",
+      "app\\features\\outbox.py",
+      "app\\server\\auth.py",
+      "app\\server\\registry.py",
+      "app\\server\\server.py",
+      "app\\transport\\reliable_udp.py",
+      "app\\web\\local_web.py",
+      "scripts\\lossy_benchmark.py",
+      "tests\\fault_injection.py",
+      "tests\\test_client.py",
+      "tests\\test_client_sessions.py",
+      "tests\\test_final_audit.py",
+      "tests\\test_local_web.py",
+      "tests\\test_lossy_network.py",
+      "tests\\test_transport.py"
+    ],
+    "time": [
+      "app\\client.py",
+      "app\\features\\files.py",
+      "app\\run_server.py",
+      "app\\server\\auth.py",
+      "app\\server\\registry.py",
+      "app\\server\\server.py",
+      "app\\transport\\reliable_udp.py",
+      "app\\web\\local_web.py",
+      "scripts\\load_test.py",
+      "scripts\\lossy_benchmark.py",
+      "scripts\\smoke_test.py",
+      "scripts\\wireshark_demo.py",
+      "tests\\test_client_sessions.py",
+      "tests\\test_lossy_network.py",
+      "tests\\test_registration_outbox.py",
+      "tests\\test_server_control.py",
+      "tests\\test_transport.py"
+    ],
+    "uuid": [
+      "app\\client.py",
+      "app\\common\\protocol.py",
+      "app\\features\\files.py",
+      "app\\server\\server.py",
+      "app\\transport\\reliable_udp.py",
+      "tests\\test_client_sessions.py",
+      "tests\\test_lossy_network.py",
+      "tests\\test_packet_budget.py",
+      "tests\\test_protocol_security.py",
+      "tests\\test_transport.py"
+    ],
+    "collections": [
+      "app\\client.py",
+      "app\\features\\outbox.py",
+      "app\\server\\server.py",
+      "app\\transport\\reliable_udp.py",
+      "tests\\test_client.py"
+    ],
+    "pathlib": [
+      "app\\client.py",
+      "app\\features\\files.py",
+      "app\\run_server.py",
+      "app\\security\\crypto.py",
+      "app\\server\\auth.py",
+      "app\\web\\local_web.py",
+      "scripts\\generate_cert.py",
+      "scripts\\generate_key.py",
+      "scripts\\load_test.py",
+      "scripts\\lossy_benchmark.py",
+      "scripts\\smoke_test.py",
+      "scripts\\wireshark_demo.py",
+      "tests\\test_client_sessions.py",
+      "tests\\test_features.py",
+      "tests\\test_final_audit.py",
+      "tests\\test_lossy_network.py",
+      "tests\\test_packet_budget.py",
+      "tests\\test_registration_outbox.py",
+      "tests\\test_server_control.py"
+    ],
+    "app": [
+      "app\\client.py",
+      "app\\common\\protocol.py",
+      "app\\features\\chat.py",
+      "app\\features\\files.py",
+      "app\\run_client.py",
+      "app\\run_server.py",
+      "app\\server\\registry.py",
+      "app\\server\\server.py",
+      "app\\transport\\reliable_udp.py",
+      "app\\web\\local_web.py",
+      "scripts\\load_test.py",
+      "scripts\\lossy_benchmark.py",
+      "scripts\\smoke_test.py",
+      "scripts\\wireshark_demo.py",
+      "tests\\test_client.py",
+      "tests\\test_client_sessions.py",
+      "tests\\test_features.py",
+      "tests\\test_final_audit.py",
+      "tests\\test_local_web.py",
+      "tests\\test_lossy_network.py",
+      "tests\\test_packet_budget.py",
+      "tests\\test_protocol_security.py",
+      "tests\\test_registration_outbox.py",
+      "tests\\test_server_control.py",
+      "tests\\test_transport.py"
+    ],
+    "argparse": [
+      "app\\run_client.py",
+      "app\\run_server.py",
+      "app\\server\\auth.py",
+      "scripts\\lossy_benchmark.py",
+      "scripts\\wireshark_demo.py"
+    ],
+    "hashlib": [
+      "app\\common\\protocol.py",
+      "app\\features\\files.py",
+      "app\\features\\outbox.py",
+      "app\\server\\auth.py",
+      "scripts\\lossy_benchmark.py",
+      "scripts\\smoke_test.py",
+      "tests\\test_client_sessions.py",
+      "tests\\test_features.py",
+      "tests\\test_final_audit.py",
+      "tests\\test_lossy_network.py"
+    ],
+    "struct": [
+      "app\\common\\protocol.py"
+    ],
+    "math": [
+      "app\\features\\files.py",
+      "app\\server\\auth.py",
+      "app\\server\\server.py"
+    ],
+    "os": [
+      "app\\features\\files.py",
+      "app\\security\\crypto.py",
+      "app\\server\\auth.py",
+      "scripts\\generate_key.py",
+      "scripts\\lossy_benchmark.py",
+      "scripts\\smoke_test.py",
+      "scripts\\wireshark_demo.py",
+      "tests\\test_client_sessions.py",
+      "tests\\test_final_audit.py",
+      "tests\\test_lossy_network.py",
+      "tests\\test_packet_budget.py",
+      "tests\\test_protocol_security.py",
+      "tests\\test_registration_outbox.py",
+      "tests\\test_server_control.py",
+      "tests\\test_transport.py"
+    ],
+    "re": [
+      "app\\features\\files.py",
+      "app\\server\\auth.py"
+    ],
+    "dataclasses": [
+      "app\\features\\files.py",
+      "app\\server\\auth.py",
+      "app\\server\\registry.py"
+    ],
+    "cryptography": [
+      "app\\security\\crypto.py",
+      "scripts\\generate_cert.py",
+      "tests\\test_protocol_security.py",
+      "tests\\test_server_control.py"
+    ],
+    "getpass": [
+      "app\\server\\auth.py"
+    ],
+    "hmac": [
+      "app\\server\\auth.py"
+    ],
+    "secrets": [
+      "app\\server\\auth.py",
+      "app\\server\\registry.py"
+    ],
+    "tempfile": [
+      "app\\server\\auth.py",
+      "app\\web\\local_web.py",
+      "scripts\\lossy_benchmark.py",
+      "scripts\\smoke_test.py",
+      "scripts\\wireshark_demo.py",
+      "tests\\test_client_sessions.py",
+      "tests\\test_features.py",
+      "tests\\test_final_audit.py",
+      "tests\\test_lossy_network.py",
+      "tests\\test_packet_budget.py",
+      "tests\\test_registration_outbox.py",
+      "tests\\test_server_control.py"
+    ],
+    "queue": [
+      "app\\transport\\reliable_udp.py"
+    ],
+    "urllib": [
+      "app\\web\\local_web.py",
+      "tests\\test_registration_outbox.py"
+    ],
+    "ipaddress": [
+      "scripts\\generate_cert.py"
+    ],
+    "datetime": [
+      "scripts\\generate_cert.py",
+      "tests\\test_server_control.py"
+    ],
+    "sys": [
+      "scripts\\load_test.py",
+      "scripts\\lossy_benchmark.py",
+      "scripts\\smoke_test.py",
+      "tests\\test_final_audit.py"
+    ],
+    "tests": [
+      "scripts\\lossy_benchmark.py",
+      "tests\\test_client_sessions.py",
+      "tests\\test_final_audit.py",
+      "tests\\test_lossy_network.py",
+      "tests\\test_registration_outbox.py"
+    ],
+    "random": [
+      "tests\\fault_injection.py"
+    ],
+    "unittest": [
+      "tests\\test_client.py",
+      "tests\\test_client_sessions.py",
+      "tests\\test_features.py",
+      "tests\\test_final_audit.py",
+      "tests\\test_local_web.py",
+      "tests\\test_lossy_network.py",
+      "tests\\test_packet_budget.py",
+      "tests\\test_protocol_security.py",
+      "tests\\test_registration_outbox.py",
+      "tests\\test_server_control.py",
+      "tests\\test_transport.py"
+    ],
+    "http": [
+      "tests\\test_final_audit.py"
+    ],
+    "subprocess": [
+      "tests\\test_final_audit.py"
+    ],
+    "concurrent": [
+      "tests\\test_final_audit.py",
+      "tests\\test_registration_outbox.py",
+      "tests\\test_server_control.py"
+    ],
+    "fault_injection": [
+      "tests\\test_lossy_network.py"
+    ]
+  }
+}

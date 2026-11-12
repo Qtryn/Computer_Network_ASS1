@@ -1,5 +1,46 @@
 # Repeatable test plan and evidence checklist
 
+## Final status — 2026-11-13
+
+Available localhost verification is complete. The fresh rerun passed **65/65
+Python tests** in 43.045s, smoke, 20-client load and Node UI checks. The remaining
+real trusted HTTPS browser cases also passed: broadcast once, empty file and
+2 MiB binary with matching SHA-256/recipient receipt, and chat visible while
+receiving at 35%. See [final_audit.md](final_audit.md) for the final decision and
+`evidence/final-audit-2026-11-13/` for new logs. Earlier evidence below retains its
+original date/provenance. LAN is NOT TESTED and BBR/CUBIC is NOT IMPLEMENTED.
+
+## Pre-report audit rerun — 2026-11-12
+
+Audit began on clean `main` at `80c6f250711793f17df19bf378ac9f744074c088`.
+Fresh baseline: 62 Python tests passed in 35.563s; smoke, 20-client load and Node
+UI checks passed. Added `tests/test_final_audit.py` with three real-socket/process
+tests: concurrent 2/10/20-client global/private chats plus 1/5/10 simultaneous
+20 KiB file transfers and SHA-256/resource cleanup; changed-content message-ID
+reuse rejection at server and receiver; and actual local process restart losing
+its RAM-only pending outbox. No application defect was found in these scenarios.
+
+Final suite: **65 tests passed in 41.368s** (41.913s including interpreter startup),
+smoke 1.125s, 20-client load 2.613s, Node DOM-double UI 0.088s. Raw stdout/stderr,
+exit codes and durations are in `evidence/final-audit-2026-11-12/`.
+
+A separate real timeout check used the unmodified 12s control idle setting:
+inactive logged-in client EOF/removal at 12.093s while another heartbeat client
+remained online. Server-stop detection was 0.009s in that one localhost sample;
+this is not a latency guarantee. Disconnected sends raised ConnectionError.
+
+New Npcap capture: 389 frames, zero interface drops; old 373-frame capture hash
+unchanged. See `wireshark_demo.md`. Import audit covers 41 Python files, with only
+cryptography external. LAN on two independent hosts remains **NOT TESTED**.
+
+The user resolved the initial certificate warning by manually installing trust.
+Real Chrome HTTPS registration/login, validation/throttling/duplicate-session
+errors, logout/relogin, Unicode file hash, restart/reauthentication, stable-ID
+ordered outbox replay and cross-account isolation then passed. DevTools showed
+zero Local/Session Storage entries on both origins. See
+`evidence/final-audit-2026-11-12/browser-account-e2e.md`; socket/DOM evidence remains
+separate. No application source change was required by the browser follow-up.
+
 ## Automated tests
 
 Initial finalization on 2026-11-12 verified 28 -> 41 tests. Integration started
@@ -88,28 +129,34 @@ chat, native file chooser for empty/Unicode/binary files, SHA-256 receipts, chat
 during binary transfer, logout/relogin and demo reconnect after server restart.
 It also verified fixes for polling closing the dropdown and progress events
 evicting chat. See [evidence/browser-e2e.md](evidence/browser-e2e.md) for observations
-and hashes. The following broader **account-mode** / LAN checks remain manual
-using the README account-mode commands:
+and hashes. The trusted HTTPS follow-up is documented separately at
+[browser-account-e2e.md](evidence/final-audit-2026-11-12/browser-account-e2e.md).
+The checklist below distinguishes account follow-up results from demo-only cases:
 
-- [ ] Configure browser trust for the locally generated certificate (or use an
+- [x] Configure browser trust for the locally generated certificate (or use an
       already trusted certificate). Open both HTTPS UI ports with no TLS error.
-- [ ] Wrong password shows an error and clears the password field; correct
+- [x] Wrong password shows an error and clears the password field; correct
       credentials display username and both online users. Demo mode says no password.
-- [ ] Broadcast/private chat goes to the intended peers; outgoing server ACK and
-      recipient application receipt have distinct labels. Offline recipient stays
-      PENDING and shows the error; recipient return allows ordered retry.
-- [ ] Use the file chooser for empty/text/binary files; see progress, receiver path
+- [x] Broadcast/private chat reaches the intended peers, with one outgoing row and
+      recipient confirmation; demo and trusted account modes were observed.
+- [x] Already queued private messages remain pending on uncertain delivery, then
+      replay after reauthentication in order with stable IDs, once each. Fresh
+      offline composition is not supported: the UI lists online recipients and
+      disables sending when disconnected. API offline-recipient tests remain separate.
+- [x] Use the file chooser for empty/text/binary files; see progress, receiver path
       and sender's SHA-256 receipt; compare with `Get-FileHash -Algorithm SHA256`.
-- [ ] Send chat during a sufficiently large transfer; chat appears before file completion.
-- [ ] Logout clears feed, message/file inputs, cursor, recipient and progress;
+      Demo and trusted HTTPS account runs now cover all three.
+- [x] Send chat during a sufficiently large transfer; chat appears before file completion.
+      Account Chrome showed chat at 35% of a 2 MiB receive; demo/lossy tests also pass.
+- [x] Logout clears feed, message/file inputs, cursor, recipient and progress;
       sending is disabled. Other UI goes offline; completed files remain on disk.
-- [ ] Login again on the same page; no old messages reappear. Repeat logout;
+- [x] Login again on the same page; no old messages reappear. Repeat logout;
       close a network connection and verify disconnected status and clean relogin.
-- [ ] Register through HTTPS, reject duplicate/invalid accounts and log in after
+- [x] Register through HTTPS, reject duplicate/invalid accounts and log in after
       server restart. Confirm no password is saved in browser storage.
-- [ ] Lose the server during chat, restart it, log in as the same account and
+- [x] Lose the server during chat, restart it, log in as the same account and
       observe the same pending message IDs become DELIVERED in order, once each.
-- [ ] Log in as a different account after logout; no previous account's pending
+- [x] Log in as a different account after logout; no previous account's pending
       text appears or is transmitted. Closing the local process loses its RAM outbox.
 - [ ] Repeat on two LAN machines with correct certificates, then collect screenshots.
 

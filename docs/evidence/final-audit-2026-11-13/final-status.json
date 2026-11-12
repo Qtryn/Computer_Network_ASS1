@@ -1,0 +1,26 @@
+{
+  "date": "2026-11-13",
+  "commit": "80c6f250711793f17df19bf378ac9f744074c088",
+  "python": "3.14.5",
+  "cryptography": "46.0.7",
+  "python_tests": 65,
+  "unittest_seconds": 43.045,
+  "trusted_root": true,
+  "application_and_requirements_unchanged": true,
+  "tracked_config": [
+    "config/.gitkeep"
+  ],
+  "captures_unchanged": [
+    {
+      "path": "docs\\evidence\\captures\\integration-loopback.pcapng",
+      "sha256": "5bfbf838cc898aa92e2bfbb4ac72f3b1eb85746ffc82654a06101bf5e1a28a4c",
+      "decryption_secrets_blocks": 0
+    },
+    {
+      "path": "docs\\evidence\\final-audit-2026-11-12\\final-loopback.pcapng",
+      "sha256": "e9acddbab2bba4ddf4a7d79240d31ebf7f7a46bb4c63823de2f54a63b3ff75f4",
+      "decryption_secrets_blocks": 0
+    }
+  ],
+  "scope": "Windows localhost; no two-host LAN or BBR/CUBIC claim"
+}

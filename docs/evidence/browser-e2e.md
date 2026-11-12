@@ -1,5 +1,10 @@
 # Integrated browser verification — 2026-11-12
 
+This is the earlier demo-mode record. Trusted HTTPS account verification was
+subsequently completed and is recorded separately in
+[browser-account-e2e.md](final-audit-2026-11-12/browser-account-e2e.md), preserving
+the scope and provenance of the original observations below.
+
 Observed in real Windows Chrome using Computer Use on the integration branch
 (`889ae10` plus the fixes committed with this record). This is a written record
 of actual browser observations; no new screenshot files are included. The older

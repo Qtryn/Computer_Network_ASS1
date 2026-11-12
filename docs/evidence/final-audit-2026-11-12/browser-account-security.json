@@ -1,0 +1,14 @@
+{
+  "browser_accounts": [
+    "test_alice",
+    "test_bob",
+    "test_other"
+  ],
+  "stored_fields": [
+    "salt",
+    "hash"
+  ],
+  "plaintext_test_password_absent": true,
+  "fresh_session_id_after_relogin": true,
+  "completed_file_preserved": true
+}
