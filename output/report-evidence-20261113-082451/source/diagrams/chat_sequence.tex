@@ -1,0 +1,16 @@
+\begin{tikzpicture}[>=Latex,font=\small,
+ participant/.style={draw=black!65,rounded corners=2pt,fill=gray!7,minimum width=2.45cm,minimum height=0.6cm,align=center},
+ msg/.style={->,thick}, ack/.style={->,dashed,draw=black!75}]
+\node[participant] (a) at (0,0) {Alice (sender)};
+\node[participant] (s) at (6.4,0) {Collaboration server};
+\node[participant] (b) at (12.8,0) {Bob (receiver)};
+\foreach \x in {0,6.4,12.8}{\draw[densely dotted,black!55] (\x,-.35)--(\x,-5.85);}
+\draw[msg] (0,-.90)--node[above,font=\scriptsize]{CHAT + stable message\_id}(6.4,-.90);
+\draw[ack] (6.4,-1.55)--node[above,font=\scriptsize]{UDP transport ACK}(0,-1.55);
+\draw[msg] (6.4,-2.20)--node[above,font=\scriptsize]{Forward encrypted CHAT}(12.8,-2.20);
+\draw[ack] (12.8,-2.85)--node[above,font=\scriptsize]{UDP transport ACK}(6.4,-2.85);
+\node[align=center,fill=white,font=\scriptsize] at (12.8,-3.52) {De-duplicate\\and accept};
+\draw[msg] (12.8,-4.18)--node[above,font=\scriptsize]{CHAT\_ACK (application)}(6.4,-4.18);
+\draw[ack] (6.4,-4.85)--node[above,font=\scriptsize]{CHAT\_RECEIPT: DELIVERED}(0,-4.85);
+\node[font=\scriptsize,align=center,text=black!70] at (6.4,-5.52) {Sender marks delivered only after the recipient application acknowledges.};
+\end{tikzpicture}

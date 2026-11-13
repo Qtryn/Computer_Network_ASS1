@@ -1,0 +1,36 @@
+﻿{
+    "panels":  [
+                   {
+                       "w":  1100,
+                       "label":  "",
+                       "y":  53,
+                       "source":  "C:\\Users\\quang\\Desktop\\MMT_LAB\\docs\\evidence\\report-screenshots\\originals\\20261113-082451\\01_alice_connected_full.png",
+                       "x":  150,
+                       "dy":  10,
+                       "dx":  10,
+                       "h":  50
+                   },
+                   {
+                       "w":  1100,
+                       "label":  "",
+                       "y":  156,
+                       "source":  "C:\\Users\\quang\\Desktop\\MMT_LAB\\docs\\evidence\\report-screenshots\\originals\\20261113-082451\\01_alice_connected_full.png",
+                       "x":  405,
+                       "dy":  72,
+                       "dx":  10,
+                       "h":  340
+                   },
+                   {
+                       "w":  1100,
+                       "label":  "",
+                       "y":  870,
+                       "source":  "C:\\Users\\quang\\Desktop\\MMT_LAB\\docs\\evidence\\report-screenshots\\originals\\20261113-082451\\01_alice_connected_full.png",
+                       "x":  405,
+                       "dy":  426,
+                       "dx":  10,
+                       "h":  148
+                   }
+               ],
+    "width":  1120,
+    "height":  575
+}

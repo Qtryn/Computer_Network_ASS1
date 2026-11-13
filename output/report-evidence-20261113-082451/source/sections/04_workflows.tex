@@ -1,0 +1,40 @@
+\section{Messaging and File-Transfer Workflows}
+\subsection{Private and broadcast chat}
+
+For a private chat, the server forwards \texttt{CHAT} only to the named recipient; for a broadcast, it uses the online recipient snapshot captured when the message is enqueued. Each outgoing chat has a stable UUID. A hop-level UDP ACK confirms that a DATA frame reached the next transport endpoint, \emph{not} that the recipient application accepted it. Only the recipient's encrypted \texttt{CHAT\_ACK} causes a final \texttt{CHAT\_RECEIPT (DELIVERED)} at the sender. \Cref{fig:chatseq} illustrates one private message.
+
+\begin{figure}[H]
+\centering\input{diagrams/chat_sequence}
+\caption{Chat delivery: transport acknowledgments and application acceptance are distinct.}
+\label{fig:chatseq}
+\end{figure}
+
+\subsection{Reliable UDP file transfer}
+
+\texttt{FileSender} calculates SHA-256 and emits \texttt{FILE\_START} with filename, size, chunk count and checksum. It reads the file in 800-byte blocks rather than loading it into memory; the server relays each encrypted chunk. The receiver checks chunk index and total size, writes a temporary \texttt{.part} file, then verifies SHA-256 before making the completed file visible. The sender receives a final \texttt{FILE\_RECEIPT}. Interrupted transfers remove incomplete temporary files, while verified downloads are retained.
+
+For example, a 32-KiB file contains \(\lceil 32768/800\rceil=41\) data chunks and two boundary messages (\texttt{FILE\_START}, \texttt{FILE\_END}): \textbf{43 application DATA packets} before retransmissions. Each hop has its own UDP ACK exchange.
+
+\begin{figure}[H]
+\centering\input{diagrams/file_sequence}
+\caption{File lifecycle with chunk relay, per-hop ACKs and end-to-end hash receipt.}
+\label{fig:fileseq}
+\end{figure}
+
+\subsection{Disconnection and pending-message recovery}
+
+A chat whose delivery is uncertain remains in a per-account RAM outbox with status \texttt{PENDING} or \texttt{SENDING}. After a server restart, demo mode reconnects automatically; password account mode asks the user to authenticate again. The sender then replays pending UUIDs in order, and the receiver suppresses duplicates by sender and message ID. A deliberate logout clears the displayed chat history and terminates the session, but the same account can resume its pending outbox \emph{while the local client process remains alive}. Closing that process loses the RAM-only queue; offline message composition is not implemented.
+
+\begin{figure}[H]
+\centering
+\evidenceslot{03_pending_before_restart.png}{Two pending messages}{Controlled CHAT DATA loss while Alice was connected.}{12cm}
+\caption{Actual account-mode sender before server restart: two queued messages remain PENDING and delivery is uncertain. Both were composed while connected.}
+\label{fig:pending-evidence}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\evidenceslot{04_delivered_after_relogin.png}{Ordered replay after relogin}{Alice has no pending items; Bob receives each original UUID once.}{13cm}
+\caption{Actual recovery after restarting the normal server and reauthenticating Bob, then Alice. Both local UI processes stayed alive. Logs confirm the original UUIDs, order A then B, one receipt per message and an empty sender outbox.}
+\label{fig:recovery-evidence}
+\end{figure}

@@ -1,0 +1,85 @@
+% HCMUT Computer Networks 1 - Assignment 1 Technical Explanation Report
+% Based on the team's original HCMUT_Report_Template/hcmut-report.cls.
+% Build: pdflatex main.tex (twice), or latexmk -pdf main.tex.
+\documentclass[oneside]{hcmut-report}
+
+\usepackage{array,booktabs,tabularx,longtable,multirow}
+\usepackage{enumitem}
+\usepackage{caption,float}
+\usepackage[table]{xcolor}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,positioning,shapes.geometric,calc}
+\usepackage[nameinlink]{cleveref}
+
+\graphicspath{{graphics/}}
+\captionsetup{font=small,skip=6pt}
+\setstretch{1.18}
+\setlength{\parskip}{0.12em}
+\emergencystretch=2em
+\renewcommand{\arraystretch}{1.13}
+\setlist[itemize]{leftmargin=1.6em,topsep=0.22em,itemsep=0.13em,parsep=0pt}
+\setlist[enumerate]{leftmargin=1.75em,topsep=0.22em,itemsep=0.13em,parsep=0pt}
+\newcolumntype{Y}{>{\raggedright\arraybackslash}X}
+\newcolumntype{L}[1]{>{\raggedright\arraybackslash}p{#1}}
+\newcommand{\filename}[1]{\texttt{#1}}
+\newcommand{\status}[1]{\textbf{#1}}
+% The report remains compilable before the team uploads its real screenshots.
+% Amber slots are deliberate submission reminders, not claimed test results.
+\definecolor{todoamber}{RGB}{168,91,5}
+\definecolor{todopale}{RGB}{255,248,218}
+\newcommand{\evidenceslot}[4]{%
+  \IfFileExists{evidence/#1}{%
+    \includegraphics[width=\linewidth,height=#4,keepaspectratio]{evidence/#1}%
+  }{%
+    \begingroup\setlength{\fboxsep}{7pt}%
+    \fcolorbox{todoamber}{todopale}{%
+      \parbox[c][\dimexpr#4-2\fboxsep-2\fboxrule\relax][c]{\dimexpr\linewidth-2\fboxsep-2\fboxrule\relax}{%
+        \centering\fontsize{8}{9.5}\selectfont
+        {\color{todoamber}\bfseries EVIDENCE TO INSERT\par}
+        \vspace{2pt}
+        {\bfseries #2\par}
+        \vspace{2pt}
+        {#3\par}
+        \vspace{3pt}
+        {\ttfamily\fontsize{6.6}{8}\selectfont\detokenize{evidence/#1}\par}%
+      }%
+    }%
+    \endgroup
+  }%
+}
+\newcommand{\pendingnote}[2]{%
+  \par\smallskip\noindent\begingroup\setlength{\fboxsep}{6pt}%
+  \fcolorbox{todoamber}{todopale}{%
+  \parbox{\dimexpr\linewidth-2\fboxsep-2\fboxrule\relax}{%
+    {\small\color{todoamber}\bfseries #1}\hspace{0.4em}{\small #2}}}%
+  \endgroup\par\smallskip
+}
+
+\deptname{Faculty of Computer Science and Engineering}
+\coursename{Computer Networks 1}
+\reporttype{Assignment 1 -- Technical Explanation Report}
+\title{Distributed and Streaming-based\\Client--Server Collaboration Application}
+\advisor{& Mr. Hoang Le Hai Thanh &}
+\stuname{%
+  & Ta Tuan Khai & 2452515 \\
+  & Nguyen Le Quang Truc & 2453347 \\
+  & Dang Tuan Kiet & 2452620 \\
+  & Phan Thi Thanh Binh & 2452153 \\
+  & Huynh Le Nghi Quan & 2453063 \\
+}
+\reporttime{November 2026}
+
+\begin{document}
+\coverpage
+\tableofcontents
+\clearpage
+
+\input{sections/01_overview}
+\input{sections/02_architecture}
+\input{sections/03_protocol}
+\input{sections/04_workflows}
+\input{sections/05_testing}
+\input{sections/06_challenges}
+\input{sections/07_conclusion}
+
+\end{document}

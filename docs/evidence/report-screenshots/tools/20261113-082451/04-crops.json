@@ -1,0 +1,36 @@
+﻿{
+    "panels":  [
+                   {
+                       "w":  1090,
+                       "label":  "A. Same Alice client process: pending 0; original messages delivered",
+                       "y":  208,
+                       "source":  "C:\\Users\\quang\\Desktop\\MMT_LAB\\docs\\evidence\\report-screenshots\\originals\\20261113-082451\\04a_alice_delivered_full.png",
+                       "x":  75,
+                       "dy":  38,
+                       "dx":  10,
+                       "h":  354
+                   },
+                   {
+                       "w":  1090,
+                       "label":  "B. Bob after relogin: each replay message once, in order",
+                       "y":  208,
+                       "source":  "C:\\Users\\quang\\Desktop\\MMT_LAB\\docs\\evidence\\report-screenshots\\originals\\20261113-082451\\04b_bob_replay_full.png",
+                       "x":  75,
+                       "dy":  440,
+                       "dx":  10,
+                       "h":  42
+                   },
+                   {
+                       "w":  1090,
+                       "label":  "",
+                       "y":  450,
+                       "source":  "C:\\Users\\quang\\Desktop\\MMT_LAB\\docs\\evidence\\report-screenshots\\originals\\20261113-082451\\04b_bob_replay_full.png",
+                       "x":  75,
+                       "dy":  500,
+                       "dx":  10,
+                       "h":  116
+                   }
+               ],
+    "width":  1110,
+    "height":  660
+}

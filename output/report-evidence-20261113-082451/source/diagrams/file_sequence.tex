@@ -1,0 +1,20 @@
+\begin{tikzpicture}[>=Latex,font=\small,
+ participant/.style={draw=black!65,rounded corners=2pt,fill=gray!7,minimum width=2.6cm,minimum height=0.6cm,align=center},
+ msg/.style={->,thick}, ack/.style={->,dashed,draw=black!75}]
+\node[participant] (a) at (0,0) {Sender};
+\node[participant] (s) at (6.4,0) {Server relay};
+\node[participant] (b) at (12.8,0) {Recipient};
+\foreach \x in {0,6.4,12.8}{\draw[densely dotted,black!55] (\x,-.35)--(\x,-6.8);}
+\draw[msg] (0,-.85)--node[above,font=\scriptsize]{FILE\_START (name, size, SHA-256)}(6.4,-.85);
+\draw[msg] (6.4,-1.42)--node[above,font=\scriptsize]{Relay FILE\_START}(12.8,-1.42);
+\draw[msg] (0,-2.16)--node[above,font=\scriptsize]{FILE\_CHUNK (index, up to 800 B)}(6.4,-2.16);
+\draw[ack] (6.4,-2.68)--node[above,font=\scriptsize]{UDP ACK}(0,-2.68);
+\draw[msg] (6.4,-3.22)--node[above,font=\scriptsize]{Relay chunk on file stream}(12.8,-3.22);
+\draw[ack] (12.8,-3.74)--node[above,font=\scriptsize]{UDP ACK}(6.4,-3.74);
+\node[font=\scriptsize,text=blue!65!black] at (10.3,-4.22) {repeat chunks};
+\draw[msg] (0,-4.75)--node[above,font=\scriptsize]{FILE\_END}(6.4,-4.75);
+\draw[msg] (6.4,-5.28)--node[above,font=\scriptsize]{Relay FILE\_END}(12.8,-5.28);
+\node[font=\scriptsize,align=center,fill=white] at (12.8,-5.77) {Verify size\\and SHA-256};
+\draw[msg] (12.8,-6.30)--node[above,font=\scriptsize]{FILE\_RECEIPT (ok / error)}(6.4,-6.30);
+\draw[msg] (6.4,-6.73)--node[above,font=\scriptsize]{Forward FILE\_RECEIPT}(0,-6.73);
+\end{tikzpicture}

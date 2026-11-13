@@ -1,0 +1,9 @@
+\section{Introduction and Project Scope}
+
+The assignment is to build a self-hosted collaboration application using \emph{raw sockets} rather than a networking framework. The implemented system connects multiple Python clients through one server and supports authenticated user discovery, broadcast/private messaging, and reliable file transfer over UDP. A local HTML/JavaScript interface provides the user-facing controls.
+
+\noindent\textbf{Design objectives.} The project focuses on four verifiable properties: correct message routing, in-order delivery despite UDP loss, file integrity, and safe recovery from network interruptions. TCP handles connection control and login; an application-defined UDP protocol transports encrypted chat/file data. This separation keeps the protocol understandable and allows chat and file streams to progress independently.
+
+\noindent\textbf{Implementation scope.} The team used Python raw TCP/UDP sockets, threads, the standard library, and the \texttt{cryptography} package for AES-GCM. The application runs on localhost or a local IP network without a cloud service, database server, Flask, Django, or WebSocket framework. The results reported here refer to the \texttt{main} source verified on November 13, 2026 (application revision \texttt{80c6f25}, audit revision \texttt{cfe60cd}).
+
+\medskip\noindent{\footnotesize\textbf{Source basis:} Course \emph{Assignment 1} handout (pp.~1--5); integrated project \url{https://github.com/Qtryn/Computer_Network_ASS1} and its committed \filename{docs/protocol.md} / \filename{docs/final\_audit.md}.}

@@ -1,0 +1,26 @@
+﻿{
+    "panels":  [
+                   {
+                       "w":  1090,
+                       "label":  "A. Alice: delivered chats and receiver receipt",
+                       "y":  207,
+                       "source":  "C:\\Users\\quang\\Desktop\\MMT_LAB\\docs\\evidence\\report-screenshots\\originals\\20261113-082451\\02a_alice_chat_receipt_full.png",
+                       "x":  410,
+                       "dy":  36,
+                       "dx":  10,
+                       "h":  451
+                   },
+                   {
+                       "w":  1090,
+                       "label":  "B. Bob: one private row, one broadcast row, verified file",
+                       "y":  448,
+                       "source":  "C:\\Users\\quang\\Desktop\\MMT_LAB\\docs\\evidence\\report-screenshots\\originals\\20261113-082451\\02b_bob_received_full.png",
+                       "x":  235,
+                       "dy":  535,
+                       "dx":  10,
+                       "h":  153
+                   }
+               ],
+    "width":  1110,
+    "height":  700
+}

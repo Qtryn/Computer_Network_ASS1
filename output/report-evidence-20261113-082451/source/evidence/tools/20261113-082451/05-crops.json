@@ -1,0 +1,86 @@
+﻿{
+    "panels":  [
+                   {
+                       "w":  980,
+                       "label":  "Wireshark: preserved audit capture, selected frames 109 / 120 / 121",
+                       "y":  96,
+                       "source":  "C:\\Users\\quang\\Desktop\\MMT_LAB\\docs\\evidence\\report-screenshots\\originals\\20261113-082451\\05a_wireshark_frame109_full.png",
+                       "x":  0,
+                       "dy":  38,
+                       "dx":  10,
+                       "h":  139
+                   },
+                   {
+                       "w":  945,
+                       "label":  "A. DATA frame 109",
+                       "y":  323,
+                       "source":  "C:\\Users\\quang\\Desktop\\MMT_LAB\\docs\\evidence\\report-screenshots\\originals\\20261113-082451\\05a_wireshark_frame109_full.png",
+                       "x":  6,
+                       "dy":  212,
+                       "dx":  10,
+                       "h":  25
+                   },
+                   {
+                       "w":  830,
+                       "label":  "",
+                       "y":  368,
+                       "source":  "C:\\Users\\quang\\Desktop\\MMT_LAB\\docs\\evidence\\report-screenshots\\originals\\20261113-082451\\05a_wireshark_frame109_full.png",
+                       "x":  970,
+                       "dy":  246,
+                       "dx":  10,
+                       "h":  78
+                   },
+                   {
+                       "w":  945,
+                       "label":  "B. Retransmitted DATA frame 120",
+                       "y":  323,
+                       "source":  "C:\\Users\\quang\\Desktop\\MMT_LAB\\docs\\evidence\\report-screenshots\\originals\\20261113-082451\\05b_wireshark_frame120_full.png",
+                       "x":  6,
+                       "dy":  372,
+                       "dx":  10,
+                       "h":  25
+                   },
+                   {
+                       "w":  830,
+                       "label":  "",
+                       "y":  368,
+                       "source":  "C:\\Users\\quang\\Desktop\\MMT_LAB\\docs\\evidence\\report-screenshots\\originals\\20261113-082451\\05b_wireshark_frame120_full.png",
+                       "x":  970,
+                       "dy":  406,
+                       "dx":  10,
+                       "h":  78
+                   },
+                   {
+                       "w":  945,
+                       "label":  "C. ACK frame 121",
+                       "y":  323,
+                       "source":  "C:\\Users\\quang\\Desktop\\MMT_LAB\\docs\\evidence\\report-screenshots\\originals\\20261113-082451\\05c_wireshark_frame121_full.png",
+                       "x":  6,
+                       "dy":  532,
+                       "dx":  10,
+                       "h":  25
+                   },
+                   {
+                       "w":  830,
+                       "label":  "",
+                       "y":  368,
+                       "source":  "C:\\Users\\quang\\Desktop\\MMT_LAB\\docs\\evidence\\report-screenshots\\originals\\20261113-082451\\05c_wireshark_frame121_full.png",
+                       "x":  970,
+                       "dy":  566,
+                       "dx":  10,
+                       "h":  78
+                   },
+                   {
+                       "w":  930,
+                       "label":  "ACK reverses the UDP ports; header bytes above come from actual panes",
+                       "y":  393,
+                       "source":  "C:\\Users\\quang\\Desktop\\MMT_LAB\\docs\\evidence\\report-screenshots\\originals\\20261113-082451\\05c_wireshark_frame121_full.png",
+                       "x":  20,
+                       "dy":  693,
+                       "dx":  10,
+                       "h":  25
+                   }
+               ],
+    "width":  1000,
+    "height":  780
+}

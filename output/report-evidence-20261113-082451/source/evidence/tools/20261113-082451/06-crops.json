@@ -1,0 +1,26 @@
+﻿{
+    "panels":  [
+                   {
+                       "w":  856,
+                       "label":  "A. unittest discover -s tests -v (actual terminal crop)",
+                       "y":  628,
+                       "source":  "C:\\Users\\quang\\Desktop\\MMT_LAB\\docs\\evidence\\report-screenshots\\originals\\20261113-082451\\06a_unittest_full.png",
+                       "x":  12,
+                       "dy":  38,
+                       "dx":  12,
+                       "h":  108
+                   },
+                   {
+                       "w":  856,
+                       "label":  "B. scripts.load_test (actual terminal crop)",
+                       "y":  219,
+                       "source":  "C:\\Users\\quang\\Desktop\\MMT_LAB\\docs\\evidence\\report-screenshots\\originals\\20261113-082451\\06b_load_full.png",
+                       "x":  12,
+                       "dy":  190,
+                       "dx":  12,
+                       "h":  77
+                   }
+               ],
+    "width":  880,
+    "height":  280
+}

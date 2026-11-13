@@ -1,0 +1,23 @@
+\begin{tikzpicture}[
+  font=\small,>=Latex,
+  box/.style={draw=black!60,rounded corners=3pt,fill=black!2,align=center,minimum height=9mm},
+  browser/.style={box,fill=blue!5,minimum width=3.4cm},
+  client/.style={box,fill=cyan!7,minimum width=3.4cm},
+  server/.style={box,fill=gray!9,minimum width=3.05cm},
+  conn/.style={<->,thick}
+]
+\node[browser] (ua) at (0,3.5) {Browser A\\HTML / JavaScript};
+\node[browser] (ub) at (12.2,3.5) {Browser B\\HTML / JavaScript};
+\node[client] (ca) at (0,1.85) {Python client A\\Chat / files / outbox};
+\node[client] (cb) at (12.2,1.85) {Python client B\\Chat / files / outbox};
+\node[server] (tcps) at (6.1,1.85) {TCP / TLS server\\Login and heartbeat};
+\node[server] (udps) at (6.1,-0.45) {UDP relay server\\ACK + routing};
+\node[server,fill=black!4] (reg) at (6.1,-2.0) {User registry\\Sessions / IP / port};
+\draw[conn] (ua)--node[right,font=\scriptsize]{HTTP(S)\, loopback}(ca);
+\draw[conn] (ub)--node[left,font=\scriptsize]{local HTTP(S)}(cb);
+\draw[conn] (ca.east)--node[above,font=\scriptsize]{TCP/TLS control}(tcps.west);
+\draw[conn] (tcps.east)--node[above,font=\scriptsize]{TCP/TLS control}(cb.west);
+\draw[conn,draw=blue!65!black] (ca.south) -- (0,-.45) -- node[above,font=\scriptsize]{AES-GCM UDP} (udps.west);
+\draw[conn,draw=blue!65!black] (cb.south) -- (12.2,-.45) -- node[above,font=\scriptsize]{AES-GCM UDP} (udps.east);
+\draw[->,thick] (udps)--(reg);
+\end{tikzpicture}
