@@ -1,6 +1,6 @@
 # Protocol specification (version 1)
 
-**Do not modify this contract without team review.** Member 1 + Member 2 own protocol updates.
+The control and UDP message contracts below describe the submitted implementation.
 
 ## 1. TCP control (one JSON object + `\n` per message)
 
@@ -70,7 +70,7 @@ The encrypted application message contains:
 Only file chunks have raw binary data; no base64 expansion inside messages.
 All UDP DATA payloads are encrypted and authenticated by the shared AES-GCM key.
 A new 12-byte random nonce is generated per DATA frame. Reusing a nonce with
-same key is dangerous; do not change this design without Member 5 review.
+same key compromises AES-GCM security.
 
 ## 3. UDP application message types
 
@@ -100,7 +100,7 @@ LOGIN_OK advertises `chat_stream`; new clients reject a missing/mismatched value
 instead of silently using incompatible ordering rules. Update client/server together.
 Legacy CHAT without message_id is still routed without application delivery guarantees.
 
-## 4. Transport API (Member 2, already callable)
+## 4. Reliable transport API
 
 ```python
 transport = ReliableUDP(bind_host, bind_port, key, on_message)
@@ -126,7 +126,7 @@ transport.close()
 - **Important:** File checksum verification + FILE_RECEIPT is the end-to-end proof,
   not UDP ACK (which only says a packet arrived at the next transport hop).
 
-## 5. Member 3 API (already implemented)
+## 5. Chat and file API
 
 ```python
 ChatService.build_message(sender, recipient, text)  # -> dict
@@ -153,9 +153,9 @@ The receiver serializes writes/abort/timeout/close under its file lock. Only
 
 ```mermaid
 sequenceDiagram
-    participant A as Sender (Member 3)
-    participant S as Server (Member 1 + Member 2)
-    participant B as Receiver (Member 3)
+    participant A as Sender
+    participant S as Server
+    participant B as Receiver
     A->>S: FILE_START (UDP DATA, encrypted)
     S-->>A: UDP ACK
     S->>B: FILE_START
@@ -224,10 +224,10 @@ RTT estimator, adaptive pacing, BBR or CUBIC. Flow/window limiting and congestio
 control are different; the exact required congestion algorithm remains a teacher
 confirmation gap. No claim of BBR/CUBIC support is made.
 
-## 8. Pending teacher confirmation
+## 8. Assignment scope
 
-1. Does the TCP handshake + UDP streaming split satisfy both TCP and UDP wording?
-2. Is the local HTTP + client-side JS solution acceptable for Step 9?
-3. Is a fixed sliding window sufficient, or must congestion control actually
-   implement BBR/CUBIC? **Current version does not implement BBR/CUBIC.**
-4. Is the five-person group and revised deadline confirmed?
+The implementation uses TCP/TLS for control and reliable UDP for chat/files;
+the browser UI uses a raw-socket local HTTP(S) adapter with client-side JavaScript.
+The handout also mentions BBR/CUBIC, which this fixed-window implementation does
+not provide. Interpretation of that congestion-control requirement remains for
+the instructor to confirm; no full-compliance claim is made.

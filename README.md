@@ -1,32 +1,54 @@
 # Network Collaboration Application
 
-Network Application Development — Assignment 1  
-**Student starter project | Python 3.11+ | Five ownership areas**
+Assignment 1 - Distributed and Streaming-based Client-Server Collaboration Application.
 
-A small self-hosted collaboration application built with **Python TCP/UDP sockets**.
-The repository is runnable so the team can test integration while developing the
-five modules. It is a **starter project, not a completed 10/10 submission**.
+A self-hosted collaboration application built with Python raw sockets. Multiple
+clients connect to a central server to discover online users, exchange private or
+broadcast messages, and transfer files. TCP/TLS carries authentication and session
+control; a custom reliable UDP protocol carries encrypted chat and file chunks.
+A local HTML/JavaScript interface shows connection state, delivery and file progress.
 
-## 1. Minimal dependencies
+## Features
 
-- Python 3.11 or newer and Git.
-- **One external package:** `cryptography` for standard AES-GCM encryption.
-- All other Python modules are from the standard library (`socket`, `threading`,
-  `json`, `struct`, `hashlib`, `unittest`, etc.).
-- **No** Flask, Django, requests, WebSockets, Socket.IO, QUIC/UDP frameworks,
-  database, GUI toolkit, or cloud services.
+- Demo login or password-based Register, Login and Logout over verified TLS/HTTPS.
+- Online user roster, private chat and broadcast to connected recipients.
+- UDP sequencing, per-stream ordering, ACKs, retries and a fixed four-packet window.
+- Streaming file chunks, receiver SHA-256 verification and a final file receipt.
+- AES-256-GCM payload encryption and authenticated packet headers.
+- Concurrent clients and separate chat/file streams.
+- Per-account RAM outbox with ordered replay after reconnect and authentication.
 
-The course handout explicitly requires payload encryption using a standard
-cryptographic library. Reimplementing AES from scratch is deliberately avoided:
-it would be harder to review and much easier to get wrong. The **application
-protocol, UDP ACK/retry/window, file splitting and reassembly are handwritten.**
+`DELIVERED` means the recipient application acknowledged the chat; it is not a
+human read receipt or durable storage guarantee. File success requires the
+receiver's SHA-256 check and `FILE_RECEIPT`, beyond transport ACKs.
 
-The local browser HTTP adapter is also implemented with `socket.socket`,
-bound only to `127.0.0.1`. No HTTP server library is used.
+## Technologies and structure
 
-## 2. Setup — Windows PowerShell
+Python standard library (`socket`, `ssl`, `threading`, `json`, `struct`, `hashlib`),
+`cryptography` for AES-GCM/certificates, and browser HTML/JavaScript. Networking,
+HTTP parsing, packet framing and reliability are implemented directly with sockets.
 
-From the project root:
+```text
+app/           Client/server entry points, protocol, transport, features, security, UI
+scripts/       Key/certificate generation, smoke/load/UI tests and optional demos
+tests/         Unit and real-socket integration regressions
+docs/          Architecture and custom protocol specification
+report/        Reserved for the team's final Technical Explanation Report PDF
+config/        Local generated key, TLS certificate/key and account store (gitignored)
+```
+
+See [architecture](docs/architecture.md) and [protocol specification](docs/protocol.md).
+
+## Requirements
+
+- Python **3.11+**; the recorded Windows verification used Python **3.14.5**.
+- Install `requirements.txt`: `cryptography>=43,<47` is the only direct dependency.
+- A browser for the UI; Node.js for the optional JavaScript logic tests.
+- Wireshark/Npcap is optional for inspecting actual network traffic.
+
+## Quick start - demo mode
+
+Run from the repository root in Windows PowerShell. No environment activation is needed.
 
 ```powershell
 py -3 -m venv .venv
@@ -34,211 +56,125 @@ py -3 -m venv .venv
 .\.venv\Scripts\python.exe scripts/generate_key.py
 ```
 
-**To avoid activation-policy problems**, the commands above call the virtual
-Python executable directly. For the remaining examples, `python` means this
-virtual environment's Python: either activate it or replace `python` with
-`.\.venv\Scripts\python.exe`.
-
-Linux/macOS:
-
-```bash
-python3 -m venv .venv
-.venv/bin/python -m pip install -r requirements.txt
-.venv/bin/python scripts/generate_key.py
-```
-
-## 3. Run a localhost demo
-
-Run in **three separate terminals** from the project root:
+Run each command in a separate terminal, keeping the repository as the working directory:
 
 ```powershell
-python -m app.run_server
+# Terminal 1: server (TCP 9100, UDP 9101)
+.\.venv\Scripts\python.exe -m app.run_server
+# Terminal 2: Alice's local UI
+.\.venv\Scripts\python.exe -m app.run_client --name alice --ui-port 8011
+# Terminal 3: Bob's local UI
+.\.venv\Scripts\python.exe -m app.run_client --name bob --ui-port 8012
 ```
 
-```powershell
-python -m app.run_client --name alice --ui-port 8011
-```
+Open <http://127.0.0.1:8011> and <http://127.0.0.1:8012>, then click **Login** on
+both pages. These commands use passwordless demo mode. Choose Bob for a private
+message/file or **Everyone** for broadcast chat. Use the actual file chooser and
+wait for receiver verification; completed files are in `downloads/<recipient>/`.
+Logout ends the network session while leaving the local UI available. Use Ctrl+C
+to stop each process.
+
+On Linux/macOS, create the environment with `python3 -m venv .venv` and replace
+`.\.venv\Scripts\python.exe` with `.venv/bin/python` in the commands above and below.
+
+## Secure account mode
+
+Stop the demo server before using the same ports. Generate a localhost certificate once:
 
 ```powershell
-python -m app.run_client --name bob --ui-port 8012
-```
-
-Open `http://127.0.0.1:8011` (Alice) and `http://127.0.0.1:8012` (Bob),
-then press **Login** on each page. These commands use **Demo / no password** mode.
-Select Bob, send a private message or a file, and inspect `downloads/bob/`.
-For broadcast chat select **Everyone**. Use Ctrl+C to stop each process.
-
-TCP port: **9100**; UDP port: **9101**. See `docs/getting_started.md`
-for localhost, LAN, and troubleshooting notes.
-
-### Password accounts and verified TLS (localhost)
-
-Start the account-mode server below, then use **Register** in the HTTPS UI.
-Enter a username (1-20 ASCII letters/digits/underscores) and an 8-128 character
-nonblank password. Registration does not log in automatically: enter the password
-again and press Login. Duplicate usernames are rejected. Only salted
-PBKDF2-HMAC-SHA256 hashes are saved atomically in the gitignored JSON account file.
-An absent account file starts empty and is created by the first registration.
-
-Alternatively provision accounts through CLI before starting the server (do not
-edit the account file concurrently with a running server). Create a certificate once:
-
-```powershell
-.\.venv\Scripts\python.exe -m app.server.auth alice
-.\.venv\Scripts\python.exe -m app.server.auth bob
 .\.venv\Scripts\python.exe -m scripts.generate_cert
 ```
 
-The generated certificate covers `localhost` and `127.0.0.1`, lasts 30 days,
-and is for a local demo. For the browser, trust this locally generated certificate
-in your browser/OS, or supply an already trusted localhost certificate. Do not
-bypass certificate errors or disable verification. Trust installation is a manual
-setup step; the application does not change the OS certificate store.
+The generated certificate covers `localhost` and `127.0.0.1` and expires after
+30 days. Configure browser/OS trust for this locally generated certificate manually,
+or provide an already trusted localhost certificate. Open the HTTPS pages only
+after normal certificate verification succeeds; never bypass warnings or disable
+verification. The application does not change the OS certificate store.
 
-Run these in three terminals:
+Start these in three separate terminals:
 
 ```powershell
 .\.venv\Scripts\python.exe -m app.run_server --accounts config/local_accounts.json --tls-cert config/local_tls/server.pem --tls-key config/local_tls/server-key.pem
-```
-
-```powershell
 .\.venv\Scripts\python.exe -m app.run_client --name alice --ui-port 8011 --tls-ca config/local_tls/server.pem --ui-cert config/local_tls/server.pem --ui-key config/local_tls/server-key.pem
-```
-
-```powershell
 .\.venv\Scripts\python.exe -m app.run_client --name bob --ui-port 8012 --tls-ca config/local_tls/server.pem --ui-cert config/local_tls/server.pem --ui-key config/local_tls/server-key.pem
 ```
 
-Open **https://127.0.0.1:8011** and **https://127.0.0.1:8012** and enter the
-provisioned username/password. Account mode requires HTTPS on the local adapter
-as well as verified TLS to the collaboration server, protecting passwords on
-both TCP hops. Passwords are never stored in browser storage, logs, or client
-attributes. The password field is cleared after every login/registration attempt.
+Open **https://127.0.0.1:8011** and **https://127.0.0.1:8012**. Register distinct
+usernames (1-20 ASCII letters, digits or underscores) with nonblank 8-128 character
+passwords. Registration does not log in automatically: enter the password again
+and click **Login**. Click **Logout** to end a session. The account JSON store is
+created by the first successful registration and contains salted PBKDF2 hashes.
+The password field clears after each attempt; passwords are not saved for reconnect.
 
-The shared certificate/key commands above are for processes on **one machine**.
-For separate LAN machines, generate each local UI's own certificate/key and
-trust it locally; copy only the collaboration server's public CA/certificate to
-clients for `--tls-ca`. Keep the server's private key on the server. Use
-`--host SERVER_IP --server-name CERTIFICATE_DNS_NAME` when the server certificate
-identifies a DNS name. All participants need the same privately distributed AES key.
+After server restart or connection loss, log in again with the same account to
+resume its RAM outbox. Bring the recipient online before replaying pending chats.
+Demo mode reconnects automatically; session expiration requires a fresh login.
 
-**Logout** sends LOGOUT, closes TCP/UDP and heartbeat, clears this client's RAM
-events and browser feed, resets recipients/progress, and leaves the local web
-listener running. Press Login again for a new token and empty chat history.
-Other clients' history and successfully downloaded files are preserved.
+The certificate/key reuse above is for processes on **one machine**. On separate
+LAN hosts, keep the collaboration server's private key on that server; give each
+local UI its own locally trusted certificate/key. Copy only the server's public
+CA/certificate for `--tls-ca` and distribute the same AES test key privately.
+Use `--host SERVER_IP --server-name CERTIFICATE_DNS_NAME` for verified server TLS.
+The browser always connects to its own local UI, which binds to `127.0.0.1`.
+For LAN use, bind the server with `--host 0.0.0.0` and allow TCP 9100/UDP 9101
+on the server's private network. Separate-host LAN operation remains unverified.
 
-### Disconnection and pending chat policy
+## Testing
 
-Every outgoing chat gets a stable UUID before its first send. Its state is
-`PENDING -> SENDING -> DELIVERED`; a send failure leaves it pending. A UDP transport
-ACK does **not** mark it delivered: DELIVERED means every intended recipient
-application accepted it and sent CHAT_ACK. It is not a human read receipt.
-The server relays that result as CHAT_RECEIPT. Empty-recipient broadcasts are rejected.
-
-The client retains pending chats in a separate **RAM-only outbox**, sends the
-oldest first, and retries at bounded 1-8 second intervals while connected. Private
-targets and the broadcast target snapshot stay fixed across retries. Retries keep
-the message UUID, and recipients suppress duplicates by `(sender, message_id)`.
-The HTTP chat response remains `{ok:true}` with `send_chat()` returning None;
-the browser gets outgoing chats/status only from state polling, avoiding duplicates.
-
-Unexpected TCP loss closes the failed transport and visibly disconnects the UI.
-Passwordless demo mode tries a fresh session with 1-8 second backoff. **Account
-mode asks for Login again**, then resumes the same account's pending messages.
-Session expiration also requires Login again. No password or refresh credential
-is saved for background authentication, and TLS validation stays enabled.
-TCP loss alone cannot identify whether the cause was server restart or network loss.
-Each new session derives fresh chat/ACK stream IDs, so reusing a UDP port cannot
-accidentally reuse a previous login's ordering state or accept its delayed chat.
-
-Explicit Logout cancels reconnect attempts and clears session events/DOM. Pending
-messages remain privately associated with their account in this local process;
-only successfully logging in as that same account can reveal/retry them. Another
-account never sees or sends them. Closing the local application loses its outbox;
-there is no chat database or promise of synchronization after application restart.
-Each outbox holds at most 500 messages; recipient dedup caches hold 5,000 IDs/hashes.
-Deduplication is bounded to this cache and the local app lifetime, not durable exactly-once delivery.
-
-## 4. Run tests
+Run from the project root after installing dependencies and generating the AES key:
 
 ```powershell
-python -m unittest discover -s tests -v
-python -m scripts.smoke_test
-python -m scripts.load_test
-# Optional JavaScript logic checks; Node is a test tool, not an app dependency:
+.\.venv\Scripts\python.exe -m unittest discover -s tests -v
+.\.venv\Scripts\python.exe -m scripts.smoke_test
+.\.venv\Scripts\python.exe -m scripts.load_test
 node scripts/test_ui.cjs
 ```
 
-The integration tests use real localhost TCP/UDP and TLS sockets. They cover
-password errors, certificate validation, logout/relogin, revoked tokens, empty/
-text/binary files, SHA-256, disconnect/timeout cleanup, malformed messages,
-loss/duplicates/reordering, and chat during file transfer. The load script keeps
-20 clients connected. The JavaScript test uses a DOM double, not a real browser.
-Real Chrome demo-mode verification is recorded in `docs/evidence/browser-e2e.md`.
-Trusted HTTPS account registration/login, logout, restart/outbox replay and
-isolation passed the follow-up in
-`docs/evidence/final-audit-2026-11-12/browser-account-e2e.md`.
-See `docs/test_plan.md` for remaining permutations and LAN checks.
+Previously recorded local verification on **November 13, 2026** passed **65 Python
+tests**, smoke checks and **20 concurrent localhost clients**. Real Chrome HTTPS
+demonstrations passed registration/login, messaging, verified files and ordered
+outbox replay. A real Wireshark capture verified repeated UDP DATA and its ACK.
+These are recorded local results, not a guarantee for every machine or future run.
+The JavaScript test uses a DOM double; it is separate from real browser testing.
+Detailed experimental artifacts are retained by the team in a development archive
+and can be provided on request; they are excluded from the submission tree.
 
-The latest pre-report verification is summarized in `docs/final_audit.md`:
-65 Python tests plus smoke/load/UI checks passed, and the remaining trusted HTTPS
-broadcast/empty/binary/concurrent-chat browser cases passed on 2026-11-13.
+Optional verification (generate the certificate before the Wireshark demo):
 
-## 5. Team ownership and readable folders
+```powershell
+.\.venv\Scripts\python.exe -m scripts.lossy_benchmark --help
+.\.venv\Scripts\python.exe -m scripts.wireshark_demo
+```
 
-| Member | Folder(s) | Responsibility |
-|---|---|---|
-| Member 1 | `app/server/`, `app/run_server.py` | TCP login, server, user registry, routing |
-| Member 2 | `app/transport/` | Reliable UDP, ACK, sequence, retry, window |
-| **Member 3** | **`app/features/`**, `tests/test_features.py` | **Chat, file chunking, reassembly, SHA-256** |
-| Member 4 | `app/web/`, `app/client.py`, `app/run_client.py` | Client and simple browser UI |
-| Member 5 | `app/security/`, tests and scripts | Encryption, testing, documentation, packaging |
+The Wireshark demo generates real TLS/UDP traffic with a lost ACK, verified file
+and server restart. Capture loopback on TCP 9100/UDP 9101 while it runs. Use that
+run's printed UUIDs; `tcp.analysis.retransmission` does not identify UDP retries.
 
-The shared `app/common/` folder belongs to the **whole group**; protocol/API
-changes must be agreed before merging. Keep changes on separate Git branches.
+## Known limitations
 
-## 6. Project documentation
+- The four-packet window is fixed flow limiting; **BBR/CUBIC is not implemented**.
+- Outboxes and deduplication caches are bounded and RAM-only. Closing the local
+  client process loses pending messages; durable chat history is not implemented.
+- New chat composition is disabled while disconnected. Pending items must have
+  been enqueued while connected; there is no offline message composition.
+- Interrupted files are cleaned up rather than resumed; completed downloads remain.
+- Two independent LAN hosts, very large files and long-duration runs were not tested.
+- UDP peers share a demo AES key. There is no production key exchange or
+  production-grade end-to-end encryption; transport ACKs themselves are unencrypted.
+- The local browser adapter is intended for localhost use, not public hosting.
 
-- `docs/getting_started.md`: basic setup, demo and common errors
-- `docs/member3_guide.md`: exactly what Member 3 should edit and test
-- `docs/git_workflow.md`: five-person push/pull and pull request workflow
-- `docs/architecture.md`: module and networking diagram
-- `docs/protocol.md`: packet and message definitions
-- `docs/member_tasks.md`: next actions per member
-- `docs/dependency_policy.md`: why the project has only one external package
-- `docs/rubric_checklist.md`: current progress against all ten rubric points
-- `docs/test_plan.md`: repeatable test scenarios
-- `docs/report_outline.md`: report requirements
-- `docs/wireshark_demo.md`: real packet capture, byte offsets, retransmission demo
-- `docs/integration_notes.md`: Member 4 selection, excluded changes and test evidence
+## Report
 
-## 7. Current limitations (do not hide in a report)
+The final PDF will be added by the team in [report/](report/) as
+`Technical_Explanation_Report.pdf`. Report editing and upload are pending separately;
+this repository does not substitute a preview or an evidence-placeholder PDF.
 
-- Demo mode uses usernames and temporary tokens. Account mode requires passwords,
-  verified server TLS, and local browser HTTPS; no automatic password fallback.
-- AES-GCM is applied to **UDP DATA payloads** with one pre-shared test key.
-  This is not a production key-exchange system.
-- UDP has ordered delivery, ACK/retry and a fixed window, but **BBR/CUBIC
-  congestion control is not implemented**. Confirm required scope with lecturer.
-- Interrupted transfers expire after 60 seconds without relay activity or when a
-  participant's session disappears/changes. Clients remove partial `.part` files
-  after an abort, logout, or local inactivity timeout; completed files stay intact.
-- A UDP timeout means delivery is uncertain. The next send on that stream first
-  retransmits retained frames with their original IDs/sequences. Late duplicates
-  cannot deliver twice. Re-entering the same chat text creates a new message.
-- New clients use message IDs and recipient application ACKs for chat delivery.
-  Legacy CHAT messages remain routable but have no outbox delivery guarantee.
-  File success still needs FILE_RECEIPT after receiver SHA-256 verification.
-- Real Windows Chrome verified localhost demo chat/files and trusted HTTPS account
-  registration/login/logout, Unicode file, restart/reauthentication, ordered
-  pending replay and account isolation. Both account origins had empty Local and
-  Session Storage after testing. Account empty/text/binary uploads and chat during
-  a 2 MiB transfer are verified. LAN, very large files and long-duration runs
-  remain manual checks. See `docs/final_audit.md` and its dated evidence links.
-  BBR/CUBIC remains unimplemented.
-- The browser UI uses a raw-socket localhost HTTP adapter; do not expose it to the Internet.
-- Original project statement says individual/pair, while this allocation has
-  five members. Confirm authorized group size and the official deadline.
+## Team
 
-`config/local_key.txt`, downloads, caches and `.venv/` are intentionally excluded
-from Git and from the distributed ZIP.
+| Contributor | Responsibility |
+|---|---|
+| Ta Tuan Khai | Server, authentication/session control, registry and routing |
+| Dang Tuan Kiet | Reliable UDP transport, ACKs, retries, ordering and window |
+| Nguyen Le Quang Truc | Chat/files, chunking, reassembly, SHA-256 and integration |
+| Phan Thi Thanh Binh | Client and browser UI, connection state and transfer progress |
+| Huynh Le Nghi Quan | AES-GCM, security tests, verification and packaging |

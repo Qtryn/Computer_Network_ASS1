@@ -1,45 +1,65 @@
-# Architecture (baseline)
+# System architecture
+
+The application separates transport, application messages and browser interaction.
+The server coordinates sessions and relays messages; every browser talks to its
+own Python client through a localhost HTTP(S) adapter.
 
 ```mermaid
 flowchart TB
-    BrowserA[Browser Alice - HTML/JS] -->|HTTP or HTTPS localhost| ClientA[Python Client A - Member 4]
-    BrowserB[Browser Bob - HTML/JS] -->|HTTP or HTTPS localhost| ClientB[Python Client B - Member 4]
-    ClientA --> ChatFileA[Member 3: chat/file]
-    ClientB --> ChatFileB[Member 3: chat/file]
-    ChatFileA --> UDP_A[Member 2: reliable UDP]
-    ChatFileB --> UDP_B[Member 2: reliable UDP]
-    UDP_A <-->|encrypted UDP: chat/file| ServerUDP[Server UDP - Member 1]
-    UDP_B <-->|encrypted UDP: chat/file| ServerUDP
-    ClientA <-->|TCP or TLS login/heartbeat| ServerTCP[Server TCP - Member 1]
-    ClientB <-->|TCP or TLS login/heartbeat| ServerTCP
-    ServerUDP --> Registry[Member 1 registry and routing]
-    ServerTCP --> Registry
-    Security[Member 5: AES-GCM and tests] -.-> UDP_A
-    Security -.-> UDP_B
-    Security -.-> ServerUDP
+    BrowserA["Alice browser: HTML/JavaScript"] <-->|"Local HTTP(S)"| ClientA[Python client A]
+    BrowserB["Bob browser: HTML/JavaScript"] <-->|"Local HTTP(S)"| ClientB[Python client B]
+    ClientA <-->|"TCP/TLS: authentication, heartbeat"| Control[Server control sockets]
+    ClientB <-->|"TCP/TLS: authentication, heartbeat"| Control
+    ClientA <--> FeaturesA[Chat / files / RAM outbox]
+    ClientB <--> FeaturesB[Chat / files / RAM outbox]
+    FeaturesA <--> TransportA[Reliable UDP + AES-GCM]
+    FeaturesB <--> TransportB[Reliable UDP + AES-GCM]
+    TransportA <-->|"Encrypted UDP DATA / transport ACK"| Relay[Server UDP relay]
+    TransportB <-->|"Encrypted UDP DATA / transport ACK"| Relay
+    Control --> Registry[Session registry and routing]
+    Relay --> Registry
 ```
 
-## Data path
+## Module boundaries
 
-1. Browser Login creates a network client. It opens TCP (verified TLS for accounts),
-   exchanges `HELLO`/`HELLO_OK`, then sends `LOGIN` with username and its UDP port.
-2. Member 1 checks username (and PBKDF2 password in account mode), creates a random session token and returns `LOGIN_OK`.
-3. Client A sends chat/file application messages through Member 2 encrypted UDP transport.
-4. Server validates sender, session token and UDP source IP/port before forwarding.
-5. Recipient Member 2 delivers the data stream in order to Member 3; Member 3 displays chat or rebuilds file.
-6. Recipient checks the SHA-256 after receiving file and sends `FILE_RECEIPT` to sender via server.
-7. Client sends TCP PING every 3 seconds. Server removes disconnected users after timeout.
-8. Logout closes the network session and clears RAM events and browser history.
-   The local web listener stays running; another login creates a new client/token.
-   Account mode also requires HTTPS between browser and the local adapter.
+| Path | Responsibility |
+|---|---|
+| `app/common/` | Shared configuration, frame encoding and message validation |
+| `app/server/` | Account authentication, connected-user registry and message/file relay |
+| `app/transport/` | Per-stream ordering, ACK/retry, duplicate suppression and fixed window |
+| `app/features/` | Chat validation, streaming file chunks, reassembly/hash checks and RAM outbox |
+| `app/security/` | AES-GCM encryption and privately supplied shared key |
+| `app/client.py` | TCP/TLS session, UDP events, heartbeat and recipient acknowledgments |
+| `app/web/` | Local raw-socket HTTP(S) adapter, login lifecycle and browser HTML/JavaScript |
 
-## Design decisions
+## Connection and data lifecycle
 
-- UDP data path is kept distinct from the TCP control path to satisfy contradictory
-  statements in the assignment without pretending TCP transfer fulfills UDP rubric.
-- One UDP stream per file (UUID), one chat/control stream per authenticated session,
-  plus an independent application-ACK stream. This keeps
-  chat and file delivery state separate. Each stream has an ordered delivery queue.
-- UI communicates only with a **local** Python process: browsers cannot directly
-  send the raw UDP packets used by this project.
-- The app is self-hosted on localhost or LAN; no cloud, database, framework or WebSocket.
+1. Register uses a separate verified TLS connection in account mode. Login opens
+   TCP/TLS, exchanges `HELLO`/`HELLO_OK`, and submits username and UDP endpoint.
+   Account mode also verifies the password against the persistent PBKDF2 store.
+2. The server creates a random session token, registers the user and returns the
+   online roster. Fresh sessions derive independent chat and application-ACK streams.
+3. The client sends encrypted UDP chat/file DATA. The server validates the sender,
+   token and source endpoint before forwarding to authenticated recipients.
+4. ReliableUDP orders each stream independently, retransmits missing ACKs and
+   suppresses transport duplicates. File streams do not share chat ordering state.
+5. A recipient accepts chat once by sender/message UUID and sends an encrypted
+   application acknowledgment. Only the corresponding receipt marks it DELIVERED.
+6. File receivers write `.part` data, check size/chunk order and SHA-256, then
+   publish the completed file and send `FILE_RECEIPT`. Failed partial files are cleaned up.
+7. TCP heartbeats maintain the session; EOF, expiry or Logout revoke its token and
+   update the roster. Logout clears session events but leaves the local UI available.
+8. Pending chats remain private to their account in the running local process.
+   Demo mode reconnects automatically; account mode requires a fresh login before
+   ordered replay. Closing the client process discards RAM state.
+
+## Design boundaries
+
+- Default server ports are TCP **9100** and UDP **9101**. Each local browser adapter
+  binds only to **127.0.0.1**; account mode requires verified TLS and local HTTPS.
+- The TCP control / UDP data split follows the reliable UDP file-transfer rubric.
+  Packet layouts and message sequences are in [protocol.md](protocol.md).
+- The fixed four-packet window limits outstanding frames; it does not implement
+  adaptive pacing, BBR or CUBIC congestion control.
+- AES-GCM uses a shared test key for UDP hops. There is no production key exchange,
+  durable outbox, database, cloud service, networking framework or WebSocket layer.

@@ -33,7 +33,18 @@ dist/
 
 # Project-generated data and logs
 downloads/
+output/
+docs/evidence/
 *.log
+*.pcap
+*.pcapng
+*.bundle
+
+# LaTeX compilation output (the final report PDF remains trackable)
+*.aux
+*.toc
+*.out
+*.synctex.gz
 
 # IDE settings
 .idea/

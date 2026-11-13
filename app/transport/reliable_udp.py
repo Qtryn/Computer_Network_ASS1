@@ -4,7 +4,7 @@ Features already present: packet sequence/ACK, retransmit missing packets,
 fixed sliding window, in-order delivery per stream, duplicate suppression,
 independent worker per stream (chat is not blocked by file processing).
 
-Not implemented: TCP-like BBR/CUBIC congestion control; see docs/member_tasks.md.
+Not implemented: TCP-like BBR/CUBIC congestion control; see docs/protocol.md.
 """
 import queue
 import socket

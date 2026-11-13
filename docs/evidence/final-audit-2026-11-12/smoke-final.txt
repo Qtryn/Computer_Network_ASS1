@@ -1,8 +1,0 @@
-[server] TCP ('127.0.0.1', 54619) | UDP 127.0.0.1:54379
-[server] alice logged in from ('127.0.0.1', 54380)
-[server] bob logged in from ('127.0.0.1', 54381)
-[server] bob disconnected
-PASS: TCP login, online list, private and broadcast chat, binary UDP file, SHA-256, receipt, logout
-[server] alice disconnected
-
-Exit=0 ElapsedSeconds=1.125

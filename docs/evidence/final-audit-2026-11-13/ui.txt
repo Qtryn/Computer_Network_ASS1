@@ -1,3 +1,0 @@
-PASS: registration/login, password clearing, progress labels, stable-ID chat dedup/status, logout/relogin and stale-response guards (DOM double; no browser)
-
-Exit=0 ElapsedSeconds=0.213
