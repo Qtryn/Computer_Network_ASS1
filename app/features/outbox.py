@@ -57,3 +57,19 @@ class ChatState:
             self.received[(message["sender"], message["message_id"])] = chat_digest(message)
             while len(self.received) > 5000:
                 self.received.popitem(last=False)
+
+    def accept(self, message):
+        with self.lock:
+            key = (message["sender"], message["message_id"])
+            digest = chat_digest(message)
+            if key in self.received:
+                if self.received[key] != digest:
+                    raise ValueError("Message ID reused with different content")
+                return False
+            self.received[key] = digest
+            if len(self.received) > 5000:
+                self.received.popitem(last=False)
+            return True
+
+    def history(self):
+        return []
