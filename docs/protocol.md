@@ -58,8 +58,9 @@ stateDiagram-v2
 | Payload | variable | For DATA: 12-byte nonce + AES-GCM ciphertext (includes 16-byte authentication tag) |
 
 Header size: **42 bytes**. Maximum UDP datagram: **1200 bytes**.
-ACK datagram contains only the 42-byte header and is NOT encrypted; it has no
-application payload. The AES-GCM associated authenticated data (AAD) is the header.
+An ACK contains the same 42-byte header plus an AES-GCM ciphertext carrying a
+two-byte, big-endian receive credit. The header is associated authenticated data
+(AAD) in both DATA and ACK. Update all endpoints together when using this ACK format.
 
 The encrypted application message contains:
 
@@ -122,7 +123,7 @@ transport.close()
   timeout is an uncertain result. Close discards the transport's pending state.
 - DATA is queued in order before sending its ACK, so an ACK send error cannot
   discard accepted data. ACKs must match the expected peer, packet, stream and
-  sequence, with no payload. They remain unencrypted and are not a security proof.
+  sequence, and pass AES-GCM authentication before their receive credit is used.
 - **Important:** File checksum verification + FILE_RECEIPT is the end-to-end proof,
   not UDP ACK (which only says a packet arrived at the next transport hop).
 
@@ -140,7 +141,7 @@ receiver.close()
 
 Default file chunk size = **800 bytes** (`chunk_size` included in FILE_START), intentionally well below the typical
 IP MTU once headers and encryption are included. File chunks are transferred
-sequentially within a file stream, with a **fixed window of 4 UDP packets**.
+in sequence within each file stream. File and chat have independent ordering.
 
 ## 6. File transfer sequence
 
@@ -189,45 +190,57 @@ sequenceDiagram
     S->>A: CHAT_RECEIPT (DELIVERED)
 ```
 
-### Outbox and reconnection state
+### Recovery, streams and direct peers
 
-The sender assigns a UUID before enqueueing, including file-independent per-chat
-status. Only the oldest pending chat is attempted until its application ACKs
-complete, preserving order across a reconnect. Failed sends/unknown delivery
-remain PENDING. Online retries use 1-8 second intervals, with stable UUID/content.
-The server rejects a repeated ID with changed content and tracks at most 5,000
-routing records. Receivers retain at most 5,000 sender/ID content hashes and ACK
-duplicates again without displaying them. Reconnected peers use new UDP sockets
-and session-derived stream IDs/sequences; the application message ID survives
-that transport change. Reusing an old UDP port is covered by a regression test.
+Secure mode commits each outgoing message to the account's SQLite outbox before
+sending UDP. Approval to remove a pending item comes from an application receipt,
+after the recipient commits its own inbox row. The identity of a chat is
+(sender, message_id). The relay rejects reused IDs with different content and
+keeps a separate acknowledgement for each destination. Reauthentication creates
+new UDP sequence spaces and leaves the application message ID intact.
 
-`ClientSession` retains a separate ChatState per username. A successful fresh login
-is required before binding/replaying an account's state. Account passwords are not
-stored, so network loss/server restart asks for reauthentication. Demo reconnects
-with bounded 1/2/4/8-second backoff. Expiration asks for login in either mode.
-Explicit logout cancels reconnect and clears disposable events/DOM, but retains
-the private RAM outbox for a future login by its owner. Closing the local process
-discards outboxes and receiver dedup caches. No durable exactly-once or offline
-history synchronization across application restarts is claimed.
+Normal live transfer uses UDP. When the relay has undelivered messages, the
+authenticated client sends SYNC_CHAT over TLS and receives a bounded CHAT_SYNC
+batch for its own account. Persisted recipient acknowledgements advance the
+pending queue. A crash during this exchange can cause a replay. Idempotent
+writes suppress duplicate display even after the recipient restarts. The local
+UI loads the newest 500 stored conversations and statuses on login.
 
-### Actual window and congestion behavior
+GET_PEERS returns authenticated endpoint/capability entries over TLS. Each
+capability derives from a server secret and both current session tokens. A
+P2P DIRECT_CHAT carries a pair-signed envelope over encrypted UDP and uses a
+separate stream for DIRECT_RECEIPT. The receiver verifies intended recipient,
+address, stream and proof before saving. The sender retains the item until all
+destinations acknowledge it. Unconfirmed traffic can fall back to relay
+delivery using the same ID. Direct delivery does not create a server history
+record. Account mode uses per-channel membership, managed by JOIN_CHANNEL and
+GET_CHANNELS. A channel send uses a recipient snapshot and the relay checks
+membership before accepting it.
 
-Defaults: MAX_DATAGRAM=1200 bytes, FILE_CHUNK_SIZE=800 bytes, HEADER=42 bytes,
-AES-GCM overhead=28 bytes, metadata length=2 bytes, WINDOW_SIZE=4,
-ACK_TIMEOUT=0.35 seconds, MAX_RETRIES=10 (initial attempt plus ten retries).
-Full chunks carry raw bytes after metadata, not base64. The receiver checks
-sequence/chunk index, expected size/count, then SHA-256 before renaming `.part`.
+### Flow and congestion behavior
 
-The fixed window limits outstanding unacknowledged packets. It is not an adaptive
-congestion window or advertised receiver-capacity scheme. There is no bandwidth/
-RTT estimator, adaptive pacing, BBR or CUBIC. Flow/window limiting and congestion
-control are different; the exact required congestion algorithm remains a teacher
-confirmation gap. No claim of BBR/CUBIC support is made.
+Default application datagram maximum is 1200 bytes, file chunk is 800 bytes,
+UDP header is 42 bytes and AES-GCM overhead is 28 bytes. The send limit per
+destination/stream is the minimum of congestion window, advertised receiver
+credit and 16 packets at the default configuration. Receiver credit counts
+queued, active and out-of-order messages. One slot is reserved for the next
+expected sequence when handling out-of-order arrivals. At zero credit the
+sender probes with at most one packet and retries if capacity is still full.
 
-## 8. Assignment scope
+The congestion window starts at four packets. Each first-attempt ACK grows it
+by 1/cwnd, approximately one packet per window of ACKs. A timeout with positive
+credit halves cwnd once per timeout interval. A timeout at advertised zero credit
+counts as a flow wait. The default timeout is 0.35 s with ten retries. This
+per-stream AIMD scheme trades precise path-wide fairness for a compact and
+observable teaching implementation. It does not estimate bandwidth or run
+BBR/CUBIC.
 
-The implementation uses TCP/TLS for control and reliable UDP for chat/files;
-the browser UI uses a raw-socket local HTTP(S) adapter with client-side JavaScript.
-The handout also mentions BBR/CUBIC, which this fixed-window implementation does
-not provide. Interpretation of that congestion-control requirement remains for
-the instructor to confirm; no full-compliance claim is made.
+## 8. HTTP and Linux raw TCP
+
+The local browser adapter parses HTTP/1.x in Python. Secure mode issues a
+Secure, HttpOnly, SameSite=Strict cookie after login and checks it before
+exposing authenticated actions and history. TLS for login/heartbeat uses a
+standard library socket. For the Linux demonstration, --raw-http uses a
+user-space IPv4 listener implementing TCP handshake, contiguous sequencing,
+ACKs, bounded buffering, retransmission and FIN. TLS runs above its byte stream
+with SSL memory BIOs. See the README for the isolated loopback experiment.

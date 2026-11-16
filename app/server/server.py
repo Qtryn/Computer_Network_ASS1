@@ -5,6 +5,7 @@ The server does not store user files or decrypt them to disk; it relays chunks.
 """
 import json
 import math
+import secrets
 import socket
 import threading
 import time
@@ -18,6 +19,8 @@ from app.server.registry import UserRegistry
 from app.transport.reliable_udp import CHAT_STREAM, ReliableUDP
 from app.features.chat import ChatService
 from app.features.outbox import chat_digest
+from app.features.chat_store import RelayChatStore
+from app.security.peer import pair_key
 
 FILE_TYPES = {"FILE_START", "FILE_CHUNK", "FILE_END"}
 MAX_CONTROL_LINE = 4096
@@ -28,7 +31,7 @@ CONTROL_IDLE_SECONDS = 12
 class CollaborationServer:
     def __init__(self, host, tcp_port, udp_port, key, *, accounts=None,
                  tls_context=None, session_seconds=3600, clock=time.monotonic,
-                 transfer_timeout=60):
+                 transfer_timeout=60, chat_db=None):
         if (accounts is None) != (tls_context is None):
             raise ValueError("Password accounts and a server TLS context are required together")
         self.host = host
@@ -48,6 +51,8 @@ class CollaborationServer:
         self.transfer_timeout = transfer_timeout
         self.chat_lock = threading.Lock()
         self.chat_deliveries = OrderedDict()  # (sender, message_id) -> routing/ACK state
+        self.chat_store = RelayChatStore(chat_db) if chat_db is not None else None
+        self.peer_secret = secrets.token_bytes(32)
         self.tcp = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         try:
             self.tcp.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -195,6 +200,8 @@ class CollaborationServer:
                                                     "chat_stream": str(session.chat_stream),
                                                     "users": names, "version": revision,
                                                     "udp_port": self.udp.port,
+                                                    "chat_sync": self.chat_store is not None,
+                                                    "peer_discovery": self.chat_store is not None and self.tls_context is not None,
                                                     "expires_in_seconds": math.ceil(max(
                                                         0, session.expires_at - self.clock()))})
                     self.roster_changed.set()
@@ -202,6 +209,27 @@ class CollaborationServer:
                 elif kind == "GET_USERS":
                     revision, names = self.registry.snapshot()
                     self._send_control(connection, {"type": "USERS", "users": names, "version": revision})
+                elif kind == "SYNC_CHAT" and self.chat_store is not None:
+                    self._send_control(connection, {"type": "CHAT_SYNC",
+                                                    "messages": self.chat_store.pending(session.username)})
+                elif kind == "GET_PEERS" and self.chat_store is not None and self.tls_context is not None:
+                    self._send_control(connection, {"type": "PEERS", "peers": [
+                        [peer.username, peer.ip, peer.udp_port,
+                         pair_key(self.peer_secret, session.token, peer.token).hex()]
+                        for peer in self.registry.all_sessions() if peer != session]})
+                elif kind in ("GET_CHANNELS", "JOIN_CHANNEL") and self.chat_store is not None:
+                    if kind == "JOIN_CHANNEL":
+                        channel = incoming.get("channel")
+                        if not isinstance(channel, str) or not USERNAME.fullmatch(channel):
+                            self._send_control(connection, {"type": "ERROR", "message": "Invalid channel name"})
+                            continue
+                        try:
+                            self.chat_store.join_channel(channel, session.username)
+                        except ValueError as exc:
+                            self._send_control(connection, {"type": "ERROR", "message": str(exc)})
+                            continue
+                    self._send_control(connection, {"type": "CHANNELS",
+                                                    "channels": self.chat_store.channels(session.username)})
                 elif kind != "PING":
                     self._protocol_error(connection, "UNEXPECTED_MESSAGE")
         except (ValueError, RecursionError):
@@ -324,11 +352,15 @@ class CollaborationServer:
                 if stream != session_stream(session.token, "ack"):
                     raise ValueError("Chat ACK session stream mismatch")
                 key = (message.get("original_sender"), message.get("message_id"))
-                with self.chat_lock:
-                    delivery = self.chat_deliveries.get(key)
-                    if delivery is None or username not in delivery["targets"]:
+                if self.chat_store is not None:
+                    if not all(isinstance(value, str) for value in key) or not self.chat_store.acknowledge(key, username):
                         raise ValueError("Invalid chat application acknowledgement")
-                    delivery["acked"].add(username)
+                else:
+                    with self.chat_lock:
+                        delivery = self.chat_deliveries.get(key)
+                        if delivery is None or username not in delivery["targets"]:
+                            raise ValueError("Invalid chat application acknowledgement")
+                        delivery["acked"].add(username)
                 self._chat_receipt(key)
             elif kind in FILE_TYPES:
                 file_id = str(message.get("file_id", ""))
@@ -386,12 +418,16 @@ class CollaborationServer:
             self._send_error(username, exc)
 
     def _chat_receipt(self, key):
-        with self.chat_lock:
-            delivery = self.chat_deliveries.get(key)
-            if delivery is None:
-                return
-            targets = delivery["targets"]
-            status = "DELIVERED" if set(targets) <= delivery["acked"] else "PENDING"
+        if self.chat_store is not None:
+            delivery = self.chat_store.delivery(key)
+        else:
+            with self.chat_lock:
+                current = self.chat_deliveries.get(key)
+                delivery = ({**current, "acked": current["acked"].copy()} if current else None)
+        if delivery is None:
+            return
+        targets = delivery["targets"]
+        status = "DELIVERED" if set(targets) <= delivery["acked"] else "PENDING"
         try:
             self._forward(key[0], CHAT_STREAM, {
                 "type": "CHAT_RECEIPT", "message_id": key[1], "status": status,
@@ -404,17 +440,34 @@ class CollaborationServer:
     def _route_chat(self, username, message):
         message_id = str(uuid.UUID(message["message_id"]))
         recipient, targets = message.get("recipient"), message.get("targets")
-        if (not isinstance(targets, list) or len(targets) > MAX_CONNECTIONS or
+        if (not isinstance(targets, list) or not 1 <= len(targets) <= MAX_CONNECTIONS or
                 any(not isinstance(name, str) or not USERNAME.fullmatch(name) for name in targets)
                 or len(set(targets)) != len(targets)):
             raise ValueError("Invalid chat targets")
-        if recipient != "*" and targets != [recipient]:
+        is_channel = isinstance(recipient, str) and recipient.startswith("#")
+        if is_channel:
+            channels = self.chat_store.channels(username) if self.chat_store else {}
+            members = channels.get(recipient[1:], [])
+            if username not in members or not set(targets) <= (set(members) - {username}):
+                raise ValueError("Invalid channel membership")
+        elif recipient != "*" and targets != [recipient]:
             raise ValueError("Private chat target mismatch")
         if recipient == "*" and username in targets:
             raise ValueError("Broadcast must exclude sender")
         clean = ChatService.build_message(username, recipient, message.get("text"),
                                           message_id=message_id, targets=targets)
         key = (username, message_id)
+        if self.chat_store is not None:
+            self.chat_store.put(clean)
+            delivery = self.chat_store.delivery(key)
+            for target in targets:
+                if target not in delivery["acked"] and self.registry.get(target):
+                    try:
+                        self._forward(target, CHAT_STREAM, clean)
+                    except (ValueError, OSError, TimeoutError, ConnectionError):
+                        pass  # A later sync can deliver the committed item.
+            self._chat_receipt(key)
+            return
         with self.chat_lock:
             delivery = self.chat_deliveries.get(key)
             if delivery is not None and chat_digest(clean) != chat_digest(delivery["message"]):

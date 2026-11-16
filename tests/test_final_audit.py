@@ -122,7 +122,7 @@ class FinalAuditTests(unittest.TestCase):
             with socket.socket() as reservation:
                 reservation.bind(("127.0.0.1", 0))
                 ui_port = reservation.getsockname()[1]
-            command = [sys.executable, "-m", "app.run_client", "--name", "audit_owner",
+            command = [sys.executable, "-m", "app.run_client", "--demo", "--name", "audit_owner",
                        "--tcp-port", str(server.tcp_port), "--udp-port", str(server.udp_port),
                        "--ui-port", str(ui_port)]
             environment = {**os.environ, "COLLAB_KEY": key.hex()}

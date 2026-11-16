@@ -12,6 +12,7 @@ from pathlib import Path
 
 from app.client import CollaborationClient, register_account
 from app.common.protocol import ACK, decode_frame
+from app.features.chat_store import DurableChatState
 from app.server.auth import PasswordAccounts, read_accounts
 from app.server.server import CollaborationServer
 
@@ -44,12 +45,14 @@ def main():
         def start_server():
             records = read_accounts(accounts_path) if accounts_path.exists() else {}
             return CollaborationServer("127.0.0.1", args.tcp_port, args.udp_port, key,
-                accounts=PasswordAccounts(records, path=accounts_path), tls_context=tls_server)
+                accounts=PasswordAccounts(records, path=accounts_path), tls_context=tls_server,
+                chat_db=root / "relay.sqlite3")
 
-        def connect(name, state=None):
+        def connect(name):
             client = CollaborationClient(name, tcp_port=args.tcp_port, udp_port=args.udp_port,
                 key=key, password="capture-demo-only", tls_context=tls_client,
-                server_hostname="localhost", download_dir=root / name, chat_state=state)
+                server_hostname="localhost", download_dir=root / name,
+                chat_state=DurableChatState(name, root / "local.sqlite3"))
             clients.append(client)
             return client
 
@@ -59,6 +62,9 @@ def main():
                 register_account(name, "capture-demo-only", tcp_port=args.tcp_port,
                                  tls_context=tls_client, server_hostname="localhost")
             alice, bob = connect("cap_alice"), connect("cap_bob")
+            alice.join_channel("capture")
+            bob.join_channel("capture")
+            wait_for(lambda: alice.channels.get("capture") == ["cap_alice", "cap_bob"])
             real_send = server.udp._sendto
             dropped = []
             alice_peer = ("127.0.0.1", alice.udp.port)
@@ -71,7 +77,7 @@ def main():
                 real_send(raw, peer)
 
             server.udp._sendto = lose_one_ack
-            alice.send_chat("cap_bob", "Captured encrypted chat with one lost transport ACK")
+            alice.send_chat("#capture", "Captured encrypted chat with one lost transport ACK")
             wait_for(lambda: not alice.chat_state.pending())
             assert len(dropped) == 1
             print("RETRANSMITTED_PACKET_ID:", dropped[0])
@@ -82,8 +88,8 @@ def main():
                                  and e.get("status") == "ok" for e in alice.get_state()["events"]))
             print("FILE_STREAM_ID:", file_id)
             # Queue an unconfirmed chat, then perform a real server stop/restart.
-            state_a, state_b = alice.chat_state, bob.chat_state
             alice.udp._sendto = lambda *_: None
+            alice.peer_routes = {}
             alice.udp.ack_timeout, alice.udp.max_retries = 0.03, 0
             try:
                 alice.send_chat("cap_bob", "Pending chat delivered after TLS reauthentication")
@@ -94,7 +100,7 @@ def main():
             alice.close()
             bob.close()
             server = start_server()
-            bob, alice = connect("cap_bob", state_b), connect("cap_alice", state_a)
+            bob, alice = connect("cap_bob"), connect("cap_alice")
             wait_for(lambda: not alice.chat_state.pending())
             print("PASS: actual TLS registration/login, encrypted UDP chat/file, one lost ACK,")
             print("      real retransmission, SHA-256 receipt, disconnect and fresh-session replay")

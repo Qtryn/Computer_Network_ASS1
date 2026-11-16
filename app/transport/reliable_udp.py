@@ -1,23 +1,32 @@
-"""Member 2: small reliable UDP transport, using raw UDP sockets.
-
-Features already present: packet sequence/ACK, retransmit missing packets,
-fixed sliding window, in-order delivery per stream, duplicate suppression,
-independent worker per stream (chat is not blocked by file processing).
-
-Not implemented: TCP-like BBR/CUBIC congestion control; see docs/protocol.md.
-"""
+"""Reliable UDP with independent streams, bounded receive credit and AIMD."""
 import queue
 import socket
 import threading
 import time
 import uuid
 from collections import deque
+from dataclasses import dataclass, field
 
 from app.common.config import ACK_TIMEOUT, MAX_DATAGRAM, MAX_RETRIES, WINDOW_SIZE
 from app.common.protocol import ACK, DATA, HEADER, decode_frame, decode_message, encode_frame, encode_message
 from app.security.crypto import CryptoBox, OVERHEAD
 
 CHAT_STREAM = uuid.UUID("00000000-0000-0000-0000-000000000001")
+
+
+@dataclass
+class FlowState:
+    window: float
+    credit: int
+    acknowledgements: int = 0
+    timeouts: int = 0
+    flow_waits: int = 0
+
+
+@dataclass
+class Acknowledgement:
+    credit: int
+    ready: threading.Event = field(default_factory=threading.Event)
 
 
 class ReliableUDP:
@@ -38,8 +47,11 @@ class ReliableUDP:
         self.out_seq = {}  # (peer, stream UUID) -> next sequence
         self.send_locks = {}  # serialize producers only within the same stream
         self.recovery = {}  # failed stream -> unacknowledged frames (bounded by window)
+        self.congestion = {}  # (peer, stream) -> FlowState
+        self.receive_capacity = max(16, window * 2)
         self.in_seq = {}  # (peer, stream UUID) -> next sequence to deliver
         self.in_buffers = {}  # (peer, stream UUID) -> {sequence: (message, peer)}
+        self.in_work = {}  # queued or active application messages per stream
         self.seen = set()
         self.seen_order = deque()
         self.stream_queues = {}  # stream key -> Queue, with its own event worker
@@ -84,6 +96,9 @@ class ReliableUDP:
             raise ConnectionError("UDP transport was stopped")
         iterator = iter(messages)
         outstanding = {}  # packet_id -> [raw, event, last_sent, retries]
+        route = (peer, stream)
+        congestion = self.congestion.setdefault(route, FlowState(min(self.window, 4), self.window))
+        last_loss = 0.0
         # Replay identical frames before allocating new sequences. A timeout means
         # delivery is uncertain; late duplicates remain safe at the receiver.
         recovery = deque(self.recovery.pop((peer, stream), []))
@@ -91,7 +106,8 @@ class ReliableUDP:
         confirmed = 0
         try:
             while (recovery or not exhausted or outstanding) and self.running.is_set():
-                while not exhausted and len(outstanding) < self.window:
+                limit = max(1, min(self.window * 4, int(congestion.window), congestion.credit))
+                while not exhausted and len(outstanding) < limit:
                     if recovery:
                         packet_id, raw = recovery.popleft()
                         is_new = False
@@ -110,7 +126,7 @@ class ReliableUDP:
                         header = encode_frame(DATA, packet_id, stream, sequence)
                         raw = header + self.crypto.encrypt(payload, header)
                         is_new = True
-                    ack = threading.Event()
+                    ack = Acknowledgement(self.window)
                     with self.lock:
                         self.pending_acks[packet_id] = (ack, peer, stream, decode_frame(raw)[3])
                     outstanding[packet_id] = [raw, ack, time.monotonic(), 0, is_new]
@@ -119,15 +135,27 @@ class ReliableUDP:
                 any_completed = False
                 for packet_id, state in list(outstanding.items()):
                     raw, ack, sent_at, retries, is_new = state
-                    if ack.is_set():
+                    if ack.ready.is_set():
                         del outstanding[packet_id]
                         with self.lock:
                             self.pending_acks.pop(packet_id, None)
                         confirmed += int(is_new)
                         any_completed = True
+                        congestion.credit = ack.credit
+                        congestion.acknowledgements += 1
+                        if not retries:
+                            congestion.window = min(self.window * 4, congestion.window + 1 / congestion.window)
                         if on_progress and is_new:
                             on_progress(confirmed)
                     elif time.monotonic() - sent_at >= self.ack_timeout:
+                        now = time.monotonic()
+                        if now - last_loss >= self.ack_timeout:
+                            if congestion.credit:
+                                congestion.window = max(1, congestion.window / 2)
+                                congestion.timeouts += 1
+                            else:
+                                congestion.flow_waits += 1
+                            last_loss = now
                         if retries >= self.max_retries:
                             raise TimeoutError(f"UDP packet {packet_id} not acknowledged; delivery uncertain")
                         self._sendto(raw, peer)
@@ -161,25 +189,29 @@ class ReliableUDP:
                 if kind == ACK:
                     with self.lock:
                         pending = self.pending_acks.get(packet_id)
-                    if (pending and not ciphertext and
-                            (peer, stream, sequence) == pending[1:]):
-                        pending[0].set()
+                    if pending and (peer, stream, sequence) == pending[1:]:
+                        credit = self.crypto.decrypt(ciphertext, raw[:HEADER.size])
+                        if len(credit) == 2:
+                            pending[0].credit = int.from_bytes(credit, "big")
+                            pending[0].ready.set()
                     continue
                 header = raw[:len(raw) - len(ciphertext)]
                 message = decode_message(self.crypto.decrypt(ciphertext, header))
                 with self.lock:
                     duplicate = (peer, packet_id) in self.seen
-                    if not duplicate:
+                if not duplicate:
+                    if not self._accept_in_order(peer, stream, sequence, message):
+                        continue  # The sender will retry when the receiver has room.
+                    with self.lock:
                         self.seen.add((peer, packet_id))
                         self.seen_order.append((peer, packet_id))
                         if len(self.seen_order) > 10000:
                             self.seen.discard(self.seen_order.popleft())
-                # Accept before ACK: an ACK socket error must not mark a packet
-                # seen without delivering it. Retransmissions then remain safe.
-                if not duplicate:
-                    self._accept_in_order(peer, stream, sequence, message)
-                # ACK even duplicate DATA so sender can stop retransmitting.
-                self._sendto(encode_frame(ACK, packet_id, stream, sequence), peer)
+                with self.lock:
+                    route = (peer, stream)
+                    credit = self.receive_capacity - self.in_work.get(route, 0) - len(self.in_buffers.get(route, {}))
+                header = encode_frame(ACK, packet_id, stream, sequence)
+                self._sendto(header + self.crypto.encrypt(credit.to_bytes(2, "big"), header), peer)
             except (ValueError, KeyError, UnicodeError, TypeError):
                 # Ignore malformed UDP datagrams without killing the receiving thread.
                 continue
@@ -193,7 +225,13 @@ class ReliableUDP:
         with self.lock:
             expected = self.in_seq.get(key, 0)
             if sequence < expected:
-                return
+                return True
+            buffered = self.in_buffers.get(key, {})
+            if sequence in buffered:
+                return True
+            used = self.in_work.get(key, 0) + len(buffered)
+            if used >= self.receive_capacity - int(sequence != expected):
+                return False
             buffer = self.in_buffers.setdefault(key, {})
             buffer[sequence] = message
             while expected in buffer:
@@ -210,7 +248,9 @@ class ReliableUDP:
                     threading.Thread(target=self._stream_worker,
                                      args=(key, task_queue), daemon=True).start()
                 for item in ready:
+                    self.in_work[key] = self.in_work.get(key, 0) + 1
                     task_queue.put((peer, stream, item))
+            return True
 
     def _stream_worker(self, key, task_queue):
         while self.running.is_set():
@@ -230,6 +270,11 @@ class ReliableUDP:
             except Exception as exc:
                 print(f"[transport] Handler error: {type(exc).__name__}: {exc}")
             finally:
+                if message is not None:
+                    with self.lock:
+                        self.in_work[key] -= 1
+                        if not self.in_work[key]:
+                            del self.in_work[key]
                 task_queue.task_done()
 
     def close(self):

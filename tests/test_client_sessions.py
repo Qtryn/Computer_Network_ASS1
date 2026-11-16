@@ -99,7 +99,9 @@ class ClientSessionTests(unittest.TestCase):
             with self.subTest(name=name):
                 self.assertEqual(http(session, "/api/file?to=bob", raw=data,
                                       headers={"X-Filename": name})[0], 202)
-                self.assertTrue(until(lambda: (self.root / "bob" / name).exists()))
+                self.assertTrue(until(lambda: any(event.get("type") == "FILE_COMPLETE" and
+                                                  event.get("name") == name
+                                                  for event in bob.get_state()["events"])))
                 self.assertEqual(hashlib.sha256((self.root / "bob" / name).read_bytes()).digest(),
                                  hashlib.sha256(data).digest())
         self.assertEqual(http(session, "/api/logout", {})[0], 200)

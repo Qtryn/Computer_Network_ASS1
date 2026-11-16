@@ -1,9 +1,7 @@
 # Technical Explanation Report
 
-The team will add the final report here as `Technical_Explanation_Report.pdf`.
-The PDF is intentionally pending while the team finishes editing it.
+[Technical_Explanation_Report.pdf](Technical_Explanation_Report.pdf) documents
+the architecture, frame layout, delivery sequence, recovery, measured network
+behavior and remaining boundaries of the Assignment 1 implementation.
 
-The report should describe the submitted implementation and state its technical
-limitations accurately. Detailed test logs, captures, screenshot originals and
-development documents are retained separately by the team and can be supplied
-on request; they are not part of the current submission tree.
+The [project README](../README.md) gives the run and verification commands.

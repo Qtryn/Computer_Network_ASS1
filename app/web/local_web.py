@@ -7,14 +7,18 @@ The browser's JavaScript talks to this local server; the Python client sends
 chat and files to the collaboration server using the team's UDP transport.
 """
 import json
+import secrets
 import socket
+import sqlite3
 import ssl
 import tempfile
 import threading
 import time
+from http.cookies import CookieError, SimpleCookie
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlsplit
 from app.server.auth import USERNAME
+from app.features.chat_store import DurableChatState
 
 HTML_PATH = Path(__file__).parent / "static" / "index.html"
 MAX_HEADERS = 16 * 1024
@@ -24,13 +28,15 @@ MAX_CHAT_REQUEST = 4096
 class ClientSession:
     """Keep the local HTTP listener alive across network login/logout."""
     def __init__(self, factory, *, client=None, account_mode=False, username="",
-                 registration_factory=None, auto_reconnect=False):
+                 registration_factory=None, auto_reconnect=False, require_http_session=False):
         self.factory = factory
         self.client = client
         self.account_mode = account_mode
         self.username = username
         self.lock = threading.Lock()
         self.registration_factory = registration_factory
+        self.require_http_session = require_http_session
+        self.http_token = None
         self.chat_states = {}
         if client is not None and hasattr(client, "chat_state"):
             self.chat_states[client.username] = client.chat_state
@@ -67,13 +73,14 @@ class ClientSession:
                 raise ValueError("Already logged in; log out first")
             if self.client:
                 self.client.close()
-                self.client = None
             if self.account_mode and not password:
                 raise ValueError("Password is required in account mode")
             if not self.account_mode and password:
                 raise ValueError("Demo mode does not use passwords")
-            self.reconnect_user = None
             self._connect(username, password if self.account_mode else None)
+            if self.require_http_session:
+                self.http_token = secrets.token_urlsafe(32)
+            return self.http_token
 
     def register(self, username, password):
         if not self.account_mode or self.registration_factory is None:
@@ -83,6 +90,7 @@ class ClientSession:
     def logout(self):
         with self.lock:
             self.reconnect_user = None  # Explicit logout must never auto-login.
+            self.http_token = None
             if self.client:
                 self.client.close()
                 self.client = None
@@ -119,6 +127,28 @@ class ClientSession:
             raise ConnectionError("Log in before sending messages or files")
         return client
 
+    def has_http_session(self, cookie_header):
+        try:
+            cookie = SimpleCookie(cookie_header).get("collab_session")
+        except CookieError:
+            return False
+        with self.lock:
+            token = self.http_token
+        return bool(cookie and token and cookie.value.isascii() and
+                    secrets.compare_digest(cookie.value, token))
+
+    def send_chat(self, recipient, text):
+        with self.lock:
+            client = self.client
+            if client and isinstance(getattr(client, "chat_state", None), DurableChatState):
+                offline = not client.running.is_set()
+                chat = client.queue_chat(recipient, text)
+                if not offline:
+                    client.outbox_wakeup.set()
+                return {"ok": True, "chat": chat, "queued_offline": offline}
+        self.active_client().send_chat(recipient, text)
+        return {"ok": True}
+
     def get_state(self, after_id=0):
         with self.lock:
             state = self.client.get_state(after_id) if self.client else {
@@ -127,24 +157,34 @@ class ClientSession:
             expired = self.client and getattr(self.client, "disconnect_kind", None) == "expired"
             reauth = bool((self.account_mode or expired) and self.reconnect_user and not state["connected"])
             retry = bool(not reauth and self.reconnect_user and not state["connected"])
+            can_queue = isinstance(getattr(self.client, "chat_state", None), DurableChatState)
+            chat_recipients = list(self.client.online) if can_queue else state["online"]
         return {**state, "account_mode": self.account_mode,
                 "registration_enabled": self.account_mode and self.registration_factory is not None,
+                "can_queue": can_queue,
+                "chat_recipients": chat_recipients,
                 "reauth_required": reauth, "reconnecting": retry,
                 "reconnect_error": self.reconnect_error}
 
 
-def send_response(connection, status, content, content_type="application/json; charset=utf-8"):
+def send_response(connection, status, content, content_type="application/json; charset=utf-8",
+                  *, session_cookie=None):
     """Write one small HTTP response. Each request uses a separate connection."""
     if isinstance(content, dict):
         content = json.dumps(content, ensure_ascii=False).encode("utf-8")
-    reason = {200: "OK", 202: "Accepted", 400: "Bad Request", 404: "Not Found",
+    reason = {200: "OK", 202: "Accepted", 400: "Bad Request", 401: "Unauthorized", 404: "Not Found",
               503: "Service Unavailable"}[status]
+    cookie_header = ""
+    if session_cookie is not None:
+        expires = "" if session_cookie else "; Max-Age=0"
+        cookie_header = f"Set-Cookie: collab_session={session_cookie}; Path=/; Secure; HttpOnly; SameSite=Strict{expires}\r\n"
     headers = (
         f"HTTP/1.1 {status} {reason}\r\n"
         f"Content-Type: {content_type}\r\n"
         f"Content-Length: {len(content)}\r\n"
         "Cache-Control: no-store\r\n"
         "X-Content-Type-Options: nosniff\r\n"
+        f"{cookie_header}"
         "Connection: close\r\n\r\n"
     )
     connection.sendall(headers.encode("ascii") + content)
@@ -204,26 +244,41 @@ def handle_request(connection, client):
     connection.settimeout(30)
     try:
         method, url, headers, first_bytes = read_request(connection)
+        protected = isinstance(client, ClientSession) and client.require_http_session
+        authenticated = not protected or client.has_http_session(headers.get("cookie", ""))
+        if protected and method == "POST" and headers.get("origin", "").lower() not in (
+                "", "https://" + headers.get("host", "").lower()):
+            return send_response(connection, 400, {"error": "Unexpected HTTP origin"})
         if method == "GET" and url.path in ("/", "/index.html"):
             return send_response(connection, 200, HTML_PATH.read_bytes(), "text/html; charset=utf-8")
         if method == "GET" and url.path == "/api/state":
             after = int(parse_qs(url.query).get("after", ["0"])[0])
+            if not authenticated:
+                return send_response(connection, 200, {
+                    "username": "", "account_mode": True, "registration_enabled": True,
+                    "online": [], "connected": False, "events": [], "session_id": None, "last_id": 0})
             return send_response(connection, 200, client.get_state(after))
-        if method != "POST" or url.path not in ("/api/chat", "/api/file", "/api/login", "/api/logout", "/api/register"):
+        if method != "POST" or url.path not in (
+                "/api/chat", "/api/file", "/api/login", "/api/logout", "/api/register", "/api/channel"):
             return send_response(connection, 404, {"error": "Endpoint not found"})
+        if not authenticated and url.path not in ("/api/login", "/api/register"):
+            return send_response(connection, 401, {"error": "Log in to this browser first"})
 
         size = int(headers.get("content-length", "-1"))
         if size < 0:
             raise ValueError("Content-Length is required")
 
         if url.path in ("/api/login", "/api/logout", "/api/register"):
+            cookie = None
             if size > MAX_CHAT_REQUEST:
                 raise ValueError("Login request too large")
             body = read_body(connection, first_bytes, size)
             if url.path == "/api/logout":
                 client.logout()
+                cookie = "" if protected else None
             else:
-                if client.account_mode and not isinstance(connection, ssl.SSLSocket):
+                if client.account_mode and not (isinstance(connection, ssl.SSLSocket) or
+                                                getattr(connection, "is_secure", False)):
                     raise ValueError("Account login requires local HTTPS")
                 credentials = json.loads(body)
                 if not isinstance(credentials, dict):
@@ -231,18 +286,28 @@ def handle_request(connection, client):
                 if url.path == "/api/register":
                     client.register(credentials.get("username"), credentials.get("password"))
                 else:
-                    client.login(credentials.get("username"), credentials.get("password"))
-            return send_response(connection, 200, {"ok": True})
+                    cookie = client.login(credentials.get("username"), credentials.get("password"))
+            return send_response(connection, 200, {"ok": True}, session_cookie=cookie)
 
-        if isinstance(client, ClientSession):
-            client = client.active_client()
-
+        if url.path == "/api/channel" and isinstance(client, ClientSession):
+            if size > MAX_CHAT_REQUEST:
+                raise ValueError("Channel request too large")
+            request = json.loads(read_body(connection, first_bytes, size))
+            client.active_client().join_channel(request["channel"])
+            return send_response(connection, 202, {"ok": True})
         if url.path == "/api/chat":
             if size > MAX_CHAT_REQUEST:
                 raise ValueError("Chat request too large")
+            if isinstance(client, ClientSession) and not client.get_state()["can_queue"]:
+                client.active_client()
             message = json.loads(read_body(connection, first_bytes, size))
+            if isinstance(client, ClientSession):
+                result = client.send_chat(message["recipient"], message["text"])
+                return send_response(connection, 202 if result.get("queued_offline") else 200, result)
             client.send_chat(message["recipient"], message["text"])
             return send_response(connection, 200, {"ok": True})
+        if isinstance(client, ClientSession):
+            client = client.active_client()
 
         recipient = parse_qs(url.query).get("to", [""])[0]
         if not recipient or recipient == "*":
@@ -273,7 +338,7 @@ def handle_request(connection, client):
             send_response(connection, 400, {"error": str(error)})
         except OSError:
             pass
-    except (OSError, TimeoutError, ConnectionError) as error:
+    except (OSError, TimeoutError, ConnectionError, sqlite3.Error) as error:
         try:
             send_response(connection, 503, {"error": str(error) or "Network request failed"})
         except OSError:
@@ -282,20 +347,26 @@ def handle_request(connection, client):
         connection.close()
 
 
-def run_local_ui(client, port, tls_context=None):
+def run_local_ui(client, port, tls_context=None, *, raw_tcp=False):
     """Start the browser HTTP adapter; listen on 127.0.0.1 only."""
-    listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    listener.bind(("127.0.0.1", port))
-    listener.listen(16)
-    listener.settimeout(0.5)
+    if raw_tcp:
+        from app.web.raw_tcp import RawTCPListener, RawTLS
+        listener = RawTCPListener("127.0.0.1", port)
+    else:
+        listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        listener.bind(("127.0.0.1", port))
+        listener.listen(16)
+        listener.settimeout(0.5)
     scheme = "https" if tls_context else "http"
     print(f"[client] Open {scheme}://127.0.0.1:{port}")
 
     def serve(connection):
         try:
             connection.settimeout(5)
-            if tls_context:
+            if tls_context and raw_tcp:
+                connection = RawTLS(connection, tls_context)
+            elif tls_context:
                 connection = tls_context.wrap_socket(connection, server_side=True)
             handle_request(connection, client)
         except OSError:
