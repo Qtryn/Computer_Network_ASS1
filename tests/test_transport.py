@@ -6,7 +6,7 @@ import unittest
 import uuid
 
 from app.common.protocol import DATA, decode_frame, encode_frame
-from app.transport.reliable_udp import ReliableUDP
+from app.transport.reliable_udp import FlowState, ReliableUDP
 
 
 class TransportTests(unittest.TestCase):
@@ -92,6 +92,8 @@ class TransportTests(unittest.TestCase):
         self.addCleanup(sender.close)
         self.addCleanup(receiver.close)
         peer, stream = ("127.0.0.1", receiver.port), uuid.uuid4()
+        # A warmed-up flow permits two packets, so packet 1 can arrive before 0.
+        sender.congestion[(peer, stream)] = FlowState(2, receiver.receive_capacity)
         original = sender._sendto
 
         def drop_zero(raw, address):
@@ -135,6 +137,7 @@ class TransportTests(unittest.TestCase):
         sender._sendto = simulated_network
         try:
             stream_id = uuid.uuid4()
+            sender.congestion[(("127.0.0.1", receiver.port), stream_id)] = FlowState(2, receiver.receive_capacity)
             messages = ({"type": "TEST", "number": index} for index in range(12))
             sender.send_many(("127.0.0.1", receiver.port), messages, stream_id)
             deadline = time.monotonic() + 2

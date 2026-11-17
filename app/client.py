@@ -1,5 +1,6 @@
 """Shared client application. Member 4 can call these methods without touching sockets."""
 import json
+import queue
 import select
 import socket
 import ssl
@@ -15,6 +16,10 @@ from app.transport.reliable_udp import CHAT_STREAM, ReliableUDP
 from app.features.chat import ChatService
 from app.features.files import FileReceiver, FileSender
 from app.features.outbox import ChatState
+from app.server.auth import USERNAME
+from app.security.peer import authenticated, peer_stream, signed
+
+AUTH_TIMEOUT = 15  # Includes PBKDF2 on a busy server; normal control reads use 1 s.
 
 def register_account(username, password, server_host="127.0.0.1", tcp_port=TCP_PORT,
                      *, tls_context=None, server_hostname=None):
@@ -24,7 +29,7 @@ def register_account(username, password, server_host="127.0.0.1", tcp_port=TCP_P
     request = json.dumps({"type": "REGISTER", "username": username, "password": password}).encode() + b"\n"
     if len(request) > 4096:
         raise ValueError("Registration request too large")
-    with socket.create_connection((server_host, tcp_port), timeout=4) as raw:
+    with socket.create_connection((server_host, tcp_port), timeout=AUTH_TIMEOUT) as raw:
         with tls_context.wrap_socket(raw, server_hostname=server_hostname or server_host) as connection:
             with connection.makefile("rb") as stream:
                 connection.sendall(b'{"type":"HELLO","version":1}\n')
@@ -54,6 +59,10 @@ class CollaborationClient:
         self.chat_send_lock = threading.Lock()
         self.outbox_wakeup = threading.Event()
         self.online = []
+        self.peer_routes = {}
+        self.channels = {}
+        self.peer_attempt = None
+        self.peer_acknowledged = set()
         self.online_version = -1
         self.events = deque(maxlen=500)
         self.event_id = 0
@@ -61,6 +70,7 @@ class CollaborationClient:
         self.file_lock = threading.Lock()
         self.close_lock = threading.Lock()
         self.control_lock = threading.Lock()
+        self.control_requests = queue.Queue(maxsize=32)
         self.closed = False
         self.disconnect_reason = ""
         self.disconnect_kind = None
@@ -75,7 +85,7 @@ class CollaborationClient:
         self.file_receiver = FileReceiver(download_dir)
         self.file_sender = FileSender()
         self.tcp = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.tcp.settimeout(4)
+        self.tcp.settimeout(AUTH_TIMEOUT)
         self.udp = ReliableUDP("0.0.0.0", 0, key, self._on_udp_message)
         try:
             self.tcp.connect((server_host, tcp_port))
@@ -105,6 +115,8 @@ class CollaborationClient:
             self.online = response["users"]
             self.online_version = response.get("version", 0)
             self.server_udp = (self.server_udp[0], response["udp_port"])
+            self.sync_enabled = response.get("chat_sync", False)
+            self.peer_discovery = response.get("peer_discovery", False)
             self.tcp.sendall(b'{"type":"GET_USERS"}\n')
         except Exception:
             self.tcp.close()
@@ -123,11 +135,13 @@ class CollaborationClient:
         while b"\n" not in self.control_buffer:
             part = self.tcp.recv(4096)
             if not part:
-                raise ConnectionError("Server closed the connection before login")
+                raise ConnectionError("Server closed the control connection")
             self.control_buffer += part
-            if len(self.control_buffer) > 8192:
+            if len(self.control_buffer.split(b"\n", 1)[0]) > 16384:
                 raise ValueError("Oversized login response")
         raw, self.control_buffer = self.control_buffer.split(b"\n", 1)
+        if len(raw) > 16384:
+            raise ValueError("Oversized control response")
         message = json.loads(raw)
         if not isinstance(message, dict):
             raise ValueError("Invalid control response")
@@ -139,11 +153,23 @@ class CollaborationClient:
         while self.running.is_set():
             try:
                 now = time.monotonic()
+                for _ in range(self.control_requests.maxsize):
+                    try:
+                        request = self.control_requests.get_nowait()
+                    except queue.Empty:
+                        break
+                    with self.control_lock:
+                        self.tcp.sendall(request)
                 if now >= next_ping:
                     with self.control_lock:
                         if not self.running.is_set():
                             return
                         self.tcp.sendall(b'{"type":"PING"}\n')
+                        if self.sync_enabled:
+                            self.tcp.sendall(b'{"type":"SYNC_CHAT"}\n')
+                            self.tcp.sendall(b'{"type":"GET_CHANNELS"}\n')
+                        if self.peer_discovery:
+                            self.tcp.sendall(b'{"type":"GET_PEERS"}\n')
                     next_ping = now + 3
                     with self.file_lock:
                         expired = self.file_receiver.cleanup_expired()
@@ -162,6 +188,19 @@ class CollaborationClient:
                     return
                 if message.get("type") == "USERS":
                     self._on_udp_message(self.server_udp, self.chat_stream, message)
+                elif message.get("type") == "CHAT_SYNC":
+                    for chat in message["messages"]:
+                        try:
+                            self._on_udp_message(self.server_udp, self.chat_stream, chat)
+                        except (OSError, TimeoutError, ConnectionError):
+                            break  # Next sync retries items the relay still considers pending.
+                elif message.get("type") == "PEERS":
+                    self.peer_routes = {name: ((host, port), bytes.fromhex(key))
+                                        for name, host, port, key in message["peers"]}
+                elif message.get("type") == "CHANNELS":
+                    self.channels = message["channels"]
+                elif message.get("type") == "ERROR":
+                    self._emit(message)
             except socket.timeout:
                 continue
             except (OSError, ValueError, ConnectionError) as exc:
@@ -194,7 +233,9 @@ class CollaborationClient:
                     "last_id": self.event_id if connected else 0, "session_id": self.session_id,
                     "disconnect_reason": self.disconnect_reason,
                     "disconnect_kind": self.disconnect_kind,
-                    "outbox": self.chat_state.pending() if connected else []}
+                    "outbox": self.chat_state.pending() if connected else [],
+                    "channels": sorted(self.channels),
+                    "history": self.chat_state.history() if connected and after_id == 0 else []}
 
     def _require_connected(self):
         if not self.running.is_set() or not self.token:
@@ -202,14 +243,36 @@ class CollaborationClient:
 
     def send_chat(self, recipient, text):
         self._require_connected()
-        targets = [name for name in self.online if name != self.username] if recipient == "*" else [recipient]
+        self.queue_chat(recipient, text)
+        self._send_oldest_chat()
+
+    def queue_chat(self, recipient, text):
+        if not isinstance(recipient, str):
+            raise ValueError("Recipient is required")
+        if recipient == "*":
+            targets = [name for name in self.online if name != self.username]
+        elif recipient.startswith("#"):
+            targets = [name for name in self.channels.get(recipient[1:], ()) if name != self.username]
+        else:
+            targets = [recipient]
         if not targets:
             raise ValueError("No online recipients for broadcast")
         event = ChatService.build_message(self.username, recipient, text,
                                          message_id=str(uuid.uuid4()), targets=targets)
         self.chat_state.enqueue(event)
         self._emit({**event, "outgoing": True, "delivery": "PENDING"})
-        self._send_oldest_chat()
+        return event
+
+    def join_channel(self, name):
+        self._require_connected()
+        if not self.sync_enabled:
+            raise ValueError("Channels require account mode")
+        if not isinstance(name, str) or not USERNAME.fullmatch(name):
+            raise ValueError("Channel: 1-20 letters, digits or underscores")
+        try:
+            self.control_requests.put_nowait((json.dumps({"type": "JOIN_CHANNEL", "channel": name}) + "\n").encode())
+        except queue.Full:
+            raise ValueError("Too many pending control requests") from None
 
     def _send_oldest_chat(self):
         with self.chat_send_lock:
@@ -224,11 +287,70 @@ class CollaborationClient:
             self._emit({"type": "CHAT_STATUS", "message_id": message_id, "status": "SENDING"})
             try:
                 packet = {key: value for key, value in event.items() if key != "status"}
+                if self._try_direct(packet):
+                    return
                 self.udp.send(self.server_udp, {**packet, "token": self.token}, self.chat_stream)
             except (ValueError, OSError, TimeoutError, ConnectionError):
                 self.chat_state.status(message_id, "PENDING")
                 self._emit({"type": "CHAT_STATUS", "message_id": message_id, "status": "PENDING"})
                 raise
+
+    def _try_direct(self, chat):
+        """Try live delivery once. Relay persists any chat that needs a retry."""
+        if chat["recipient"].startswith("#") or chat["message_id"] == self.peer_attempt:
+            return False
+        routes = self.peer_routes
+        if not all(name in routes for name in chat["targets"]):
+            return False
+        self.peer_attempt = chat["message_id"]
+        self.peer_acknowledged = set()
+        for target in chat["targets"]:
+            address, key = routes[target]
+            message = signed({"type": "DIRECT_CHAT", "sender": self.username,
+                              "target": target, "chat": chat}, key)
+            try:
+                self.udp.send(address, message, peer_stream(key, self.username, "DIRECT_CHAT"))
+            except (OSError, TimeoutError, ValueError, ConnectionError):
+                return False
+        return True
+
+    def _handle_peer(self, address, stream, message):
+        sender, kind = message.get("sender"), message.get("type")
+        if not isinstance(sender, str) or kind not in ("DIRECT_CHAT", "DIRECT_RECEIPT"):
+            return
+        route = self.peer_routes.get(sender)
+        if not route or route[0] != address or message.get("target") != self.username:
+            return
+        key = route[1]
+        if stream != peer_stream(key, sender, kind) or not authenticated(message, key):
+            return
+        if kind == "DIRECT_CHAT":
+            chat = message["chat"]
+            if (chat.get("type") != "CHAT" or chat.get("sender") != sender or
+                    self.username not in chat.get("targets", []) or
+                    chat.get("recipient") not in (self.username, "*")):
+                return
+            uuid.UUID(chat["message_id"])
+            if self.chat_state.accept(chat):
+                self._emit(chat)
+            receipt = signed({"type": "DIRECT_RECEIPT", "sender": self.username,
+                              "target": sender, "message_id": chat["message_id"]}, key)
+            self.udp.send(address, receipt, peer_stream(key, self.username, "DIRECT_RECEIPT"))
+        else:
+            with self.chat_send_lock:
+                pending = self.chat_state.pending()
+                if (not pending or pending[0]["message_id"] != message.get("message_id") or
+                        pending[0]["message_id"] != self.peer_attempt):
+                    return
+                chat = pending[0]
+                if sender not in chat["targets"]:
+                    return
+                self.peer_acknowledged.add(sender)
+                if set(chat["targets"]) <= self.peer_acknowledged:
+                    if self.chat_state.status(chat["message_id"], "DELIVERED"):
+                        self._emit({"type": "CHAT_RECEIPT", "message_id": chat["message_id"],
+                                    "status": "DELIVERED", "path": "direct"})
+                        self.outbox_wakeup.set()
 
     def _outbox_loop(self):
         delay = 1
@@ -269,7 +391,10 @@ class CollaborationClient:
         return file_id
 
     def _on_udp_message(self, peer, stream, message):
-        if not self.running.is_set() or not self.token or peer != self.server_udp:
+        if not self.running.is_set() or not self.token:
+            return
+        if peer != self.server_udp:
+            self._handle_peer(peer, stream, message)
             return
         kind = message.get("type")
         if kind in ("USERS", "CHAT", "CHAT_RECEIPT", "CHAT_STATUS", "ERROR", "FILE_RECEIPT"):
@@ -293,11 +418,8 @@ class CollaborationClient:
             message_id = message.get("message_id")
             if message_id:
                 uuid.UUID(message_id)
-                duplicate = self.chat_state.already_received(message)
-                if not duplicate:
-                    if message.get("sender") != self.username and self._emit(message) is None:
-                        return
-                    self.chat_state.remember(message)
+                if self.chat_state.accept(message) and message.get("sender") != self.username:
+                    self._emit(message)
                 self.udp.send(self.server_udp, {
                     "type": "CHAT_ACK", "sender": self.username, "token": self.token,
                     "original_sender": message["sender"], "message_id": message_id,
@@ -369,7 +491,6 @@ class CollaborationClient:
         with self.event_lock:
             self.events.clear()
             self.event_id = 0
-            self.online = []
             self.online_version = -1
             self.token = None
         worker = getattr(self, "heartbeat_thread", None)

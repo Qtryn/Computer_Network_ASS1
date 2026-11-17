@@ -5,21 +5,26 @@ Assignment 1 - Distributed and Streaming-based Client-Server Collaboration Appli
 A self-hosted collaboration application built with Python raw sockets. Multiple
 clients connect to a central server to discover online users, exchange private or
 broadcast messages, and transfer files. TCP/TLS carries authentication and session
-control; a custom reliable UDP protocol carries encrypted chat and file chunks.
+control and offline chat synchronization; a custom reliable UDP protocol carries
+live encrypted chat and file chunks.
 A local HTML/JavaScript interface shows connection state, delivery and file progress.
 
 ## Features
 
 - Demo login or password-based Register, Login and Logout over verified TLS/HTTPS.
 - Online user roster, private chat and broadcast to connected recipients.
-- UDP sequencing, per-stream ordering, ACKs, retries and a fixed four-packet window.
+- UDP sequencing, per-stream ordering, authenticated ACKs and selective retries.
+- Receiver-advertised credit and bounded AIMD (one to four packets per stream).
 - Streaming file chunks, receiver SHA-256 verification and a final file receipt.
 - AES-256-GCM payload encryption and authenticated packet headers.
 - Concurrent clients and separate chat/file streams.
-- Per-account RAM outbox with ordered replay after reconnect and authentication.
+- Per-account SQLite outbox/inbox and server relay storage in account mode.
+- Offline chat composition after authentication, stable-ID replay and durable deduplication.
+- Optional authenticated direct peer chat and persistent channel membership.
 
 `DELIVERED` means the recipient application acknowledged the chat; it is not a
-human read receipt or durable storage guarantee. File success requires the
+human read receipt. In account mode, receivers commit chat to SQLite before
+acknowledging it. File success requires the
 receiver's SHA-256 check and `FILE_RECEIPT`, beyond transport ACKs.
 
 ## Technologies and structure
@@ -94,9 +99,9 @@ verification. The application does not change the OS certificate store.
 Start these in three separate terminals:
 
 ```powershell
-.\.venv\Scripts\python.exe -m app.run_server --accounts config/local_accounts.json --tls-cert config/local_tls/server.pem --tls-key config/local_tls/server-key.pem
-.\.venv\Scripts\python.exe -m app.run_client --name alice --ui-port 8011 --tls-ca config/local_tls/server.pem --ui-cert config/local_tls/server.pem --ui-key config/local_tls/server-key.pem
-.\.venv\Scripts\python.exe -m app.run_client --name bob --ui-port 8012 --tls-ca config/local_tls/server.pem --ui-cert config/local_tls/server.pem --ui-key config/local_tls/server-key.pem
+.\.venv\Scripts\python.exe -m app.run_server --accounts config/local_accounts.json --chat-db config/relay.sqlite3 --tls-cert config/local_tls/server.pem --tls-key config/local_tls/server-key.pem
+.\.venv\Scripts\python.exe -m app.run_client --name alice --ui-port 8011 --state-db config/alice.sqlite3 --tls-ca config/local_tls/server.pem --ui-cert config/local_tls/server.pem --ui-key config/local_tls/server-key.pem
+.\.venv\Scripts\python.exe -m app.run_client --name bob --ui-port 8012 --state-db config/bob.sqlite3 --tls-ca config/local_tls/server.pem --ui-cert config/local_tls/server.pem --ui-key config/local_tls/server-key.pem
 ```
 
 Open **https://127.0.0.1:8011** and **https://127.0.0.1:8012**. Register distinct
@@ -107,8 +112,13 @@ created by the first successful registration and contains salted PBKDF2 hashes.
 The password field clears after each attempt; passwords are not saved for reconnect.
 
 After server restart or connection loss, log in again with the same account to
-resume its RAM outbox. Bring the recipient online before replaying pending chats.
-Demo mode reconnects automatically; session expiration requires a fresh login.
+resume its SQLite outbox, including after closing and reopening the client process.
+Keep the same database paths. A disconnected authenticated profile can queue chat
+to known contacts; files require a live connection. Logout clears the visible
+history and revokes the browser session, while retaining the owner's pending chats
+on disk. Delivery waits for every intended recipient's application confirmation.
+Demo mode uses RAM and reconnects automatically; session expiration requires a fresh login.
+Cookies have a separate name for each UI port so two localhost tabs stay independent.
 
 The certificate/key reuse above is for processes on **one machine**. On separate
 LAN hosts, keep the collaboration server's private key on that server; give each
@@ -130,12 +140,21 @@ Run from the project root after installing dependencies and generating the AES k
 node scripts/test_ui.cjs
 ```
 
-Previously recorded local verification on **November 13, 2026** passed **65 Python
-tests**, smoke checks and **20 concurrent localhost clients**. Real Chrome HTTPS
-demonstrations passed registration/login, messaging, verified files and ordered
-outbox replay. A real Wireshark capture verified repeated UDP DATA and its ACK.
-These are recorded local results, not a guarantee for every machine or future run.
-The JavaScript test uses a DOM double; it is separate from real browser testing.
+Local verification on **November 17, 2026** passed **97 Python tests**, smoke checks,
+**20 concurrent localhost clients**, and JavaScript UI checks. The suite includes
+actual CLI processes with verified HTTPS, a shared browser-style cookie jar,
+SQLite recovery after client/server restarts, concurrent files, fault injection,
+forged ACK rejection, receiver backpressure and AIMD recovery. A new real Wireshark
+capture on TCP 9100/UDP 9101 recorded 399 packets with no capture drops, including
+byte-identical UDP retransmission and an encrypted 76-byte ACK.
+The JavaScript test uses a DOM double. A fresh **Chrome demo-mode UI check passed**
+private/broadcast messages, binary files in both directions with verified SHA-256,
+and Logout clearing Alice's feed while Bob remained connected. File selection and
+submission used the real browser UI; received bytes matched the 8192-byte fixture.
+Four targeted recovery/session/HTTP regressions also passed on recheck. Password
+registration/login and durable recovery were verified through automated HTTPS
+tests; the password-based Chrome authentication flow was not rerun. Earlier
+November 13 browser evidence predates this integration.
 Detailed experimental artifacts are retained by the team in a development archive
 and can be provided on request; they are excluded from the submission tree.
 
@@ -143,6 +162,7 @@ Optional verification (generate the certificate before the Wireshark demo):
 
 ```powershell
 .\.venv\Scripts\python.exe -m scripts.lossy_benchmark --help
+.\.venv\Scripts\python.exe -m scripts.flow_demo
 .\.venv\Scripts\python.exe -m scripts.wireshark_demo
 ```
 
@@ -152,15 +172,18 @@ run's printed UUIDs; `tcp.analysis.retransmission` does not identify UDP retries
 
 ## Known limitations
 
-- The four-packet window is fixed flow limiting; **BBR/CUBIC is not implemented**.
-- Outboxes and deduplication caches are bounded and RAM-only. Closing the local
-  client process loses pending messages; durable chat history is not implemented.
-- New chat composition is disabled while disconnected. Pending items must have
-  been enqueued while connected; there is no offline message composition.
+- Congestion control is simple tested **AIMD**, not BBR/CUBIC; no adaptive pacing
+  or bandwidth estimator is implemented. The supplied lecturer clarification allows this.
+- SQLite is local plaintext storage protected by the OS profile. Account isolation
+  is enforced by the application, not against another process that can read its DB.
+  Pending queues and displayed history are bounded; stored history has no retention purge.
+- Demo mode remains RAM-only. Offline composition requires a previously authenticated
+  profile and known recipients; account-mode reconnect requires a password again.
 - Interrupted files are cleaned up rather than resumed; completed downloads remain.
 - Two independent LAN hosts, very large files and long-duration runs were not tested.
 - UDP peers share a demo AES key. There is no production key exchange or
-  production-grade end-to-end encryption; transport ACKs themselves are unencrypted.
+  production-grade end-to-end encryption. DATA and transport ACKs use AES-GCM;
+  direct chat additionally validates a session-pair HMAC capability issued over TLS.
 - The local browser adapter is intended for localhost use, not public hosting.
 
 ## Report

@@ -5,7 +5,7 @@ import unittest
 
 from app.client import CollaborationClient
 from app.server.server import CollaborationServer
-from app.web.local_web import ClientSession, handle_request
+from app.web.local_web import MAX_HEADERS, ClientSession, handle_request, read_request
 
 
 class FakeConnection:
@@ -51,6 +51,19 @@ def request(ui, method, path, body=b""):
 
 
 class LocalWebLoginTests(unittest.TestCase):
+    def test_duplicate_content_length_is_rejected(self):
+        raw = b"POST /api/chat HTTP/1.1\r\nContent-Length: 1\r\nContent-Length: 2\r\n\r\n{}"
+        with self.assertRaisesRegex(ValueError, "Duplicate"):
+            read_request(FakeConnection(raw))
+
+    def test_header_limit_does_not_include_the_already_received_upload_body(self):
+        body = b"x" * MAX_HEADERS
+        raw = f"POST /api/file?to=bob HTTP/1.1\r\nContent-Length: {len(body)}\r\n\r\n".encode() + body
+        method, _, headers, first = read_request(FakeConnection(raw))
+        self.assertEqual(method, "POST")
+        self.assertEqual(int(headers["content-length"]), len(body))
+        self.assertEqual(first, body)
+
     def test_login_from_ui_and_state(self):
         ui = ClientSession(lambda name, password: FakeClient(name))
         self.addCleanup(ui.close)

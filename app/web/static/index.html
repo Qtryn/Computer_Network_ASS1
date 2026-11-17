@@ -41,6 +41,14 @@
     <label for="recipient">Send to</label>
     <select id="recipient"><option value="*">Everyone (broadcast)</option></select>
   </div>
+  <form id="channel-form" class="line" hidden>
+    <label for="channel-name">Channel</label>
+    <input id="channel-name" type="text" required maxlength="20" pattern="[A-Za-z0-9_]+" placeholder="Channel name">
+    <button type="submit">Create or join</button>
+    <label for="channel-view">View messages</label>
+    <select id="channel-view"><option value="">All conversations</option></select>
+    <span id="channel-notice" aria-live="polite"></span>
+  </form>
   <div id="feed" aria-label="Messages and transfer events"></div>
   <form id="chat-form" class="line">
     <input id="message" type="text" maxlength="600" placeholder="Type your message" required>
@@ -61,6 +69,7 @@
   let wasConnected = false;
   let loginError = '';
   let recipientRoster = null;
+  let channelRoster = null;
   const renderedChats = new Map();
   const $ = (id) => document.getElementById(id);
   function addLine(text, isError = false) {
@@ -86,6 +95,7 @@
     row.line.textContent = '[' + item.sender + ' → ' +
       (item.recipient === '*' ? 'everyone' : item.recipient) + '] ' + item.text +
       (item.outgoing ? ' (' + (item.delivery || item.status || 'PENDING') + ')' : '');
+    row.line.hidden = Boolean($('channel-view').value && item.recipient !== $('channel-view').value);
   }
   function updateChat(messageId, status) {
     for (const row of renderedChats.values()) {
@@ -108,7 +118,7 @@
       const data = await api('/api/state?after=' + cursor);
       if (requestGeneration !== generation) return;
       if (data.session_id !== sessionId || (!data.connected && wasConnected)) {
-        clearSession();
+        clearSession(!data.connected && data.can_queue);
         sessionId = data.session_id;
         if (data.connected && data.events.length === 0 && data.last_id > 0) {
           refreshing = false;
@@ -125,21 +135,31 @@
       if (data.reconnecting) $('status').textContent += ' | Disconnected: retrying demo connection (1-8 seconds)';
       if (data.reconnect_error) $('status').textContent += ' | ' + data.reconnect_error;
       $('login-form').hidden = data.connected;
-      $('logout').disabled = !data.connected;
+      $('logout').disabled = !(data.connected || data.can_queue);
       $('password').hidden = !data.account_mode;
       $('password').required = data.account_mode;
       $('register').hidden = !data.registration_enabled || data.connected;
-      $('recipient').disabled = !data.connected;
-      $('outbox-status').textContent = data.connected
+      $('recipient').disabled = !(data.connected || data.can_queue);
+      $('outbox-status').textContent = (data.connected || data.can_queue)
         ? 'Pending chats: ' + (data.outbox || []).length + ' | DELIVERED = recipient application acknowledged'
-        : 'Pending messages are kept privately in RAM; log in as the same account to resume.';
+        : 'Log in as the same account to resume pending messages.';
       if (!$('username').value && data.username) $('username').value = data.username;
-      for (const form of [$('chat-form'), $('file-form')]) {
-        for (const input of form.elements) input.disabled = !data.connected;
-      }
+      for (const input of $('chat-form').elements) input.disabled = !(data.connected || data.can_queue);
+      for (const input of $('file-form').elements) input.disabled = !data.connected;
       $('online').textContent = data.online.join(', ') || '(none)';
       const current = $('recipient').value;
-      const recipients = data.online.filter(user => user !== data.username);
+      const channels = (data.channels || []).map(name => '#' + name);
+      const channelKey = JSON.stringify(channels);
+      $('channel-form').hidden = !data.can_queue;
+      for (const input of $('channel-form').elements) input.disabled = !data.connected;
+      if (channelRoster !== channelKey) {
+        const viewing = $('channel-view').value;
+        $('channel-view').replaceChildren(new Option('All conversations', ''));
+        for (const name of channels) $('channel-view').add(new Option(name, name));
+        $('channel-view').value = channels.includes(viewing) ? viewing : '';
+        channelRoster = channelKey;
+      }
+      const recipients = [...(data.chat_recipients || data.online).filter(user => user !== data.username), ...channels];
       const rosterKey = JSON.stringify(recipients);
       if (recipientRoster !== rosterKey) {
         $('recipient').replaceChildren(new Option('Everyone (broadcast)', '*'));
@@ -147,11 +167,15 @@
         $('recipient').value = (current === '*' || recipients.includes(current)) ? current : '*';
         recipientRoster = rosterKey;
       }
+      for (const chat of (data.history || [])) showChat(chat);
       for (const event of (data.connected ? data.events : [])) {
         if (event.id <= cursor) continue;
         cursor = event.id;
         if (event.type === 'CHAT') {
           showChat(event);
+          if (!event.outgoing && event.recipient.startsWith('#')) {
+            $('channel-notice').textContent = 'New message in ' + event.recipient;
+          }
         } else if (event.type === 'CHAT_STATUS') {
           updateChat(event.message_id, event.status);
         } else if (event.type === 'ERROR') {
@@ -191,14 +215,17 @@
     }
     finally { refreshing = false; }
   }
-  function clearSession() {
+  function clearSession(preserveDraft = false) {
+    const destination = $('recipient').value;
     cursor = 0;
     recipientRoster = null;
+    channelRoster = null;
     renderedChats.clear();
     $('feed').replaceChildren();
-    $('recipient').replaceChildren(new Option('Everyone (broadcast)', '*'));
+    if (!preserveDraft) $('recipient').replaceChildren(new Option('Everyone (broadcast)', '*'));
+    else $('recipient').value = destination;
     $('online').textContent = '(none)';
-    $('message').value = '';
+    if (!preserveDraft) $('message').value = '';
     $('file').value = '';
     $('password').value = '';
     $('progress').value = 0;
@@ -255,19 +282,40 @@
     event.preventDefault();
     const requestGeneration = generation;
     try {
-      await api('/api/chat', {method:'POST', headers:{'Content-Type':'application/json'},
+      const result = await api('/api/chat', {method:'POST', headers:{'Content-Type':'application/json'},
         body:JSON.stringify({recipient:$('recipient').value, text:$('message').value})});
       if (requestGeneration !== generation) return;
       $('message').value = '';
+      if (result.queued_offline) {
+        showChat({...result.chat, outgoing:true, delivery:'PENDING'});
+        addLine('Cannot connect to server. Message saved and waiting to send.', true);
+      }
       await refresh();
     } catch (err) { if (requestGeneration === generation) addLine('Send failed: ' + err.message, true); }
+  });
+  $('channel-view').addEventListener('change', () => {
+    const selected = $('channel-view').value;
+    if (selected) $('recipient').value = selected;
+    for (const {line, chat} of renderedChats.values()) line.hidden = Boolean(selected && chat.recipient !== selected);
+    $('channel-notice').textContent = '';
+  });
+  $('channel-form').addEventListener('submit', async event => {
+    event.preventDefault();
+    const name = $('channel-name').value;
+    try {
+      await api('/api/channel', {method:'POST', headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({channel:name})});
+      $('channel-notice').textContent = 'Joining #' + name + '…';
+      $('channel-name').value = '';
+      await refresh();
+    } catch (err) { $('channel-notice').textContent = err.message; }
   });
   $('file-form').addEventListener('submit', async (event) => {
     event.preventDefault();
     const requestGeneration = generation;
     const file = $('file').files[0];
     const recipient = $('recipient').value;
-    if (!file || recipient === '*') {
+    if (!file || recipient === '*' || recipient.startsWith('#')) {
       addLine('Choose a file and a specific online recipient first.', true); return;
     }
     try {

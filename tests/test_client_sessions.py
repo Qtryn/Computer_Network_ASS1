@@ -163,6 +163,24 @@ class ClientSessionTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "verified TLS"):
             self.client(server, "charlie", password="never-send-this")
 
+    def test_slow_password_verification_does_not_use_the_short_control_poll_deadline(self):
+        tls_server, tls_client = tls_contexts(self.root)
+        salt = os.urandom(16)
+        accounts = PasswordAccounts({"alice": {
+            "salt": salt.hex(), "hash": hash_password("fixture-password", salt).hex()}})
+        verify = accounts.verify
+
+        def slow_verify(username, password):
+            time.sleep(4.1)  # Reproduces PBKDF2 latency beyond the former 4 s timeout.
+            return verify(username, password)
+
+        accounts.verify = slow_verify
+        server = self.server(accounts=accounts, tls_context=tls_server)
+        alice = self.client(server, "alice", password="fixture-password",
+                            tls_context=tls_client, server_hostname="localhost")
+        self.assertTrue(alice.get_state()["connected"])
+        self.assertEqual(alice.tcp.gettimeout(), 1)
+
     def test_abrupt_tcp_loss_closes_udp_and_clears_history(self):
         server = self.server()
         alice = self.client(server, "alice")

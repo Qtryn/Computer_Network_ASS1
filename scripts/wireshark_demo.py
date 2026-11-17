@@ -11,7 +11,7 @@ import time
 from pathlib import Path
 
 from app.client import CollaborationClient, register_account
-from app.common.protocol import ACK, decode_frame
+from app.common.protocol import ACK, HEADER, decode_frame
 from app.server.auth import PasswordAccounts, read_accounts
 from app.server.server import CollaborationServer
 
@@ -61,10 +61,15 @@ def main():
             alice, bob = connect("cap_alice"), connect("cap_bob")
             real_send = server.udp._sendto
             dropped = []
+            ack_count = [0]
             alice_peer = ("127.0.0.1", alice.udp.port)
 
             def lose_one_ack(raw, peer):
-                kind, packet_id, stream, sequence, _ = decode_frame(raw)
+                kind, packet_id, stream, sequence, ciphertext = decode_frame(raw)
+                if kind == ACK:
+                    clear = server.udp.crypto.decrypt(ciphertext, raw[:HEADER.size])
+                    assert len(clear) == 6  # receiver credit + monotonically newer snapshot
+                    ack_count[0] += 1
                 if kind == ACK and peer == alice_peer and sequence == 0 and not dropped:
                     dropped.append(packet_id)
                     return
@@ -73,6 +78,7 @@ def main():
             server.udp._sendto = lose_one_ack
             alice.send_chat("cap_bob", "Captured encrypted chat with one lost transport ACK")
             wait_for(lambda: not alice.chat_state.pending())
+            print("AUTHENTICATED_ACKS_CHECKED:", ack_count[0])
             assert len(dropped) == 1
             print("RETRANSMITTED_PACKET_ID:", dropped[0])
             path = root / "Báo cáo capture.bin"

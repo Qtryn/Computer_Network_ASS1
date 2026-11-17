@@ -21,7 +21,8 @@ HELLO receives `HELLO_OK`; then LOGIN is sent. In account mode the connection
 uses verified TLS and LOGIN includes `password` (never persist it). Rejections
 include `LOGIN_FAIL`, `LOGIN_LOCKED` or `ERROR`. Demo mode also accepts the
 legacy LOGIN-first handshake, but never accepts a password. Other control
-messages include `PING`, `GET_USERS`, `LOGOUT`, `AUTH_REQUIRED`, and `ERROR`. TCP uses newline-delimited
+messages include `PING`, `GET_USERS`, `GET_PEERS`, `SYNC_CHAT`, `JOIN_CHANNEL`,
+`GET_CHANNELS`, `LOGOUT`, `AUTH_REQUIRED`, and `ERROR`. TCP uses newline-delimited
 JSON framing because `recv()` alone does not preserve message boundaries.
 One active session per username. Account records store salted PBKDF2-SHA256
 hashes; account mode requires a server TLS context. Expired sessions require
@@ -55,11 +56,14 @@ stateDiagram-v2
 | Sequence | 4 | Big endian unsigned integer, starts at 0 per (peer,stream) |
 | Packet ID | 16 | UUID; ACK references exactly this packet |
 | Stream ID | 16 | Session-derived chat/ACK UUID; file uses file UUID (`...0001` remains a legacy sentinel) |
-| Payload | variable | For DATA: 12-byte nonce + AES-GCM ciphertext (includes 16-byte authentication tag) |
+| Payload | variable | DATA and ACK: 12-byte nonce + AES-GCM ciphertext (includes 16-byte authentication tag) |
 
 Header size: **42 bytes**. Maximum UDP datagram: **1200 bytes**.
-ACK datagram contains only the 42-byte header and is NOT encrypted; it has no
-application payload. The AES-GCM associated authenticated data (AAD) is the header.
+An ACK is **76 bytes**: 42-byte header, 12-byte nonce, six encrypted bytes and a
+16-byte authentication tag. Its plaintext is `[2-byte free receiver credit]
+[4-byte increasing credit revision]`, both unsigned big endian. Reordered ACK
+snapshots cannot replace a newer credit revision. The AES-GCM AAD is the complete
+header for both DATA and ACK. Bare, malformed, tampered and wrong-key ACKs fail.
 
 The encrypted application message contains:
 
@@ -68,9 +72,10 @@ The encrypted application message contains:
 ```
 
 Only file chunks have raw binary data; no base64 expansion inside messages.
-All UDP DATA payloads are encrypted and authenticated by the shared AES-GCM key.
-A new 12-byte random nonce is generated per DATA frame. Reusing a nonce with
-same key compromises AES-GCM security.
+All UDP DATA and ACK payloads are encrypted and authenticated by the shared
+AES-GCM key. A new 12-byte random nonce is generated for newly encrypted frames.
+Retransmission repeats the identical ciphertext, UUID and sequence. Never encrypt
+different plaintext with a reused nonce/key pair.
 
 ## 3. UDP application message types
 
@@ -122,7 +127,8 @@ transport.close()
   timeout is an uncertain result. Close discards the transport's pending state.
 - DATA is queued in order before sending its ACK, so an ACK send error cannot
   discard accepted data. ACKs must match the expected peer, packet, stream and
-  sequence, with no payload. They remain unencrypted and are not a security proof.
+  sequence, with a valid AES-GCM credit payload. They prove hop acceptance, not
+  final application delivery or verified file storage.
 - **Important:** File checksum verification + FILE_RECEIPT is the end-to-end proof,
   not UDP ACK (which only says a packet arrived at the next transport hop).
 
@@ -140,7 +146,7 @@ receiver.close()
 
 Default file chunk size = **800 bytes** (`chunk_size` included in FILE_START), intentionally well below the typical
 IP MTU once headers and encryption are included. File chunks are transferred
-sequentially within a file stream, with a **fixed window of 4 UDP packets**.
+sequentially within a file stream, with an **adaptive window capped at 4 packets**.
 
 ## 6. File transfer sequence
 
@@ -195,9 +201,9 @@ The sender assigns a UUID before enqueueing, including file-independent per-chat
 status. Only the oldest pending chat is attempted until its application ACKs
 complete, preserving order across a reconnect. Failed sends/unknown delivery
 remain PENDING. Online retries use 1-8 second intervals, with stable UUID/content.
-The server rejects a repeated ID with changed content and tracks at most 5,000
-routing records. Receivers retain at most 5,000 sender/ID content hashes and ACK
-duplicates again without displaying them. Reconnected peers use new UDP sockets
+The server rejects a repeated ID with changed content. Demo mode keeps bounded
+5,000-entry RAM routing/inbox caches. Account mode stores sender/ID content hashes
+in SQLite and ACKs identical duplicates again without displaying them. Reconnected peers use new UDP sockets
 and session-derived stream IDs/sequences; the application message ID survives
 that transport change. Reusing an old UDP port is covered by a regression test.
 
@@ -206,9 +212,30 @@ is required before binding/replaying an account's state. Account passwords are n
 stored, so network loss/server restart asks for reauthentication. Demo reconnects
 with bounded 1/2/4/8-second backoff. Expiration asks for login in either mode.
 Explicit logout cancels reconnect and clears disposable events/DOM, but retains
-the private RAM outbox for a future login by its owner. Closing the local process
-discards outboxes and receiver dedup caches. No durable exactly-once or offline
-history synchronization across application restarts is claimed.
+the owner's pending outbox for future login. In account mode, `DurableChatState`
+commits outgoing messages before send and incoming messages before application
+ACK. `local_chat` is unique by (owner, sender, ID); interrupted SENDING rows reset
+to PENDING on reopen. Up to 500 pending messages and the latest 500 displayed
+history rows are loaded per owner. SQLite records remain on disk without retention
+purging. Demo mode remains RAM-only and loses state when the client process exits.
+
+The account-mode relay persists bodies and separate target ACKs. `SYNC_CHAT`
+returns up to four pending messages for the authenticated recipient over verified
+TLS; it does not send those offline bodies over UDP. Relay pending entries are
+limited to 500 per sender. Delivery receipts require confirmation by every target.
+This is idempotent replay with persistent deduplication, not a distributed
+exactly-once transaction between independent databases.
+
+### Optional direct peers and channels
+
+Verified TLS `GET_PEERS` issues a capability derived by HMAC-SHA256 from the
+server secret and both current session tokens. Direct chat/ACK messages carry a
+body proof and session-pair stream ID; the client verifies source endpoint, proof,
+stream and stable message content. UDP frames still use the shared AES-GCM key.
+An old session pair cannot authorize a new direct message. Direct delivery can
+fall back to server relay on retry; persistent deduplication handles both paths.
+`JOIN_CHANNEL`/`GET_CHANNELS` manage SQLite membership (eight channels per user,
+64 members per channel). A channel chat snapshots its targets like other chat.
 
 ### Actual window and congestion behavior
 
@@ -218,16 +245,37 @@ ACK_TIMEOUT=0.35 seconds, MAX_RETRIES=10 (initial attempt plus ten retries).
 Full chunks carry raw bytes after metadata, not base64. The receiver checks
 sequence/chunk index, expected size/count, then SHA-256 before renaming `.part`.
 
-The fixed window limits outstanding unacknowledged packets. It is not an adaptive
-congestion window or advertised receiver-capacity scheme. There is no bandwidth/
-RTT estimator, adaptive pacing, BBR or CUBIC. Flow/window limiting and congestion
-control are different; the exact required congestion algorithm remains a teacher
-confirmation gap. No claim of BBR/CUBIC support is made.
+Each (peer, stream) starts at cwnd=1 and one initial credit. The send limit is
+`min(WINDOW_SIZE, floor(cwnd), receiver_credit)`. Clean ACKs add 1/cwnd up to four;
+network timeouts halve cwnd with floor one, at most once per timeout interval.
+The default receive capacity is 16 per stream, accounting for active callbacks,
+queued events and out-of-order packets. One slot is reserved for a missing expected
+packet. This bounds memory while preserving per-stream ordered delivery.
+
+At zero credit, no new packet ID/sequence is allocated. With no outstanding frame,
+the sender repeats its last accepted DATA as a credit probe and waits for its ACK;
+the receiver deduplicates it and reports current capacity. Outstanding retries at
+zero credit do not consume network retry budget or reduce cwnd. A separate
+FLOW_TIMEOUT=10 seconds bounds this waiting; `flow_waits` and network `timeouts`
+are separate metrics. A fresh later send can recover retained uncertain frames.
+Run `python -m scripts.flow_demo` for actual ACK, timeout, cwnd and credit values.
+This is AIMD, with no bandwidth/RTT estimator, adaptive pacing, BBR or CUBIC.
+
+### Local HTTP(S) adapter
+
+The adapter parses one request per connection, rejects duplicate headers, enforces
+header/body limits and constructs explicit Content-Length responses. Up to 32
+HTTP workers run concurrently. Account APIs require HTTPS and a random Secure,
+HttpOnly, SameSite=Strict cookie named `collab_session_<UI port>`; ports need
+different cookie names because browser cookies are not port-isolated. Logout
+revokes the token and clears visible history. Client-side generation guards reject
+stale poll responses after logout. Previously authenticated disconnected profiles
+can enqueue chat to known contacts; file sending requires a live connection.
 
 ## 8. Assignment scope
 
-The implementation uses TCP/TLS for control and reliable UDP for chat/files;
+The implementation uses TCP/TLS for control/offline synchronization and reliable UDP for live chat/files;
 the browser UI uses a raw-socket local HTTP(S) adapter with client-side JavaScript.
-The handout also mentions BBR/CUBIC, which this fixed-window implementation does
-not provide. Interpretation of that congestion-control requirement remains for
-the instructor to confirm; no full-compliance claim is made.
+The supplied lecturer clarification permits standard TCP and a tested, explainable
+congestion mechanism such as AIMD; StreApRous, raw TCP/IP and separate P2P/channels
+are optional. No reference framework or additional TCP encryption layer is used.

@@ -118,6 +118,20 @@ async function main() {
   await refresh;
   assert.equal(elements.feed.children.length, 0);
   assert.equal(vm.runInContext('cursor', context), 0);
+  deferred = null;
+  elements.recipient.value = 'bob';
+  elements.message.value = 'draft kept during network loss';
+  state = {...state, connected:false, can_queue:true, chat_recipients:['alice','bob'], online:[],
+    events:[], outbox:[{message_id:'disk-id', status:'PENDING'}],
+    history:[{type:'CHAT',sender:'alice',recipient:'bob',text:'saved on disk',
+      outgoing:true,message_id:'disk-id',delivery:'PENDING'}]};
+  await vm.runInContext('refresh()', context);
+  assert.equal(elements.message.disabled, false, 'authenticated offline profile can compose');
+  assert.equal(elements.file.disabled, true, 'file sending still requires a live connection');
+  assert.match(elements['outbox-status'].textContent, /Pending chats: 1/);
+  assert.equal(elements.feed.children.filter(line => line.textContent.includes('saved on disk')).length, 1);
+  await vm.runInContext('refresh()', context);
+  assert.equal(elements.feed.children.filter(line => line.textContent.includes('saved on disk')).length, 1);
   assert.match(html, /id="password" type="password"/);
   assert(!/localStorage|sessionStorage/.test(html));
   assert(requests.some(r => r.url === '/api/login'));

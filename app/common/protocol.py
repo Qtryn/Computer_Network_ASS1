@@ -2,7 +2,7 @@
 
 UDP frame: 4-byte magic, version (1), kind (1), sequence (4),
 16-byte packet ID, 16-byte stream ID, then AES-GCM ciphertext.
-An ACK frame uses the same header and has no payload.
+An ACK frame authenticates a two-byte receive credit and four-byte credit revision.
 The encrypted message is: 2-byte metadata length + JSON metadata + raw bytes.
 """
 import json

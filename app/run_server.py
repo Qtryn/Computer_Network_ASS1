@@ -15,16 +15,22 @@ def main():
     parser.add_argument("--host", default="127.0.0.1", help="Use 0.0.0.0 for LAN access")
     parser.add_argument("--tcp-port", type=int, default=TCP_PORT)
     parser.add_argument("--udp-port", type=int, default=UDP_PORT)
+    parser.add_argument("--demo", action="store_true", help="Explicit passwordless test mode")
     parser.add_argument("--accounts", type=Path, help="Local JSON account file; requires TLS")
+    parser.add_argument("--chat-db", type=Path, help="SQLite relay inbox (defaults beside accounts file)")
     parser.add_argument("--tls-cert", type=Path, help="Server certificate (PEM)")
     parser.add_argument("--tls-key", type=Path, help="Server private key (PEM)")
     parser.add_argument("--max-attempts", type=int, default=3)
     parser.add_argument("--lock-seconds", type=int, default=60)
     parser.add_argument("--session-seconds", type=int, default=3600)
     args = parser.parse_args()
+    if args.demo and any((args.accounts, args.tls_cert, args.tls_key, args.chat_db)):
+        parser.error("--demo cannot be combined with account or TLS options")
     account_options = (args.accounts, args.tls_cert, args.tls_key)
     if any(account_options) and not all(account_options):
         parser.error("--accounts, --tls-cert and --tls-key must be supplied together")
+    if args.chat_db and not args.accounts:
+        parser.error("--chat-db requires TLS account mode")
     if min(args.max_attempts, args.lock_seconds, args.session_seconds) < 1:
         parser.error("Login limits and session duration must be positive")
     accounts = tls_context = None
@@ -38,7 +44,9 @@ def main():
             tls_context.load_cert_chain(args.tls_cert, args.tls_key)
         server = CollaborationServer(args.host, args.tcp_port, args.udp_port, load_key(),
                                      accounts=accounts, tls_context=tls_context,
-                                     session_seconds=args.session_seconds)
+                                     session_seconds=args.session_seconds,
+                                     chat_db=(args.chat_db or args.accounts.with_suffix(".sqlite3"))
+                                     if args.accounts else None)
     except (OSError, ValueError, RuntimeError) as exc:
         parser.error(str(exc))
     try:

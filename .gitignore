@@ -17,6 +17,8 @@ config/local_key.txt
 config/local_accounts.json
 config/.accounts-*
 config/local_tls/
+config/*.sqlite3
+config/*.sqlite3-*
 
 # Test, lint, and type-check caches
 .pytest_cache/
