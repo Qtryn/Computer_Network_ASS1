@@ -1,5 +1,6 @@
 """Real socket regressions for TLS, local HTTP sessions and interrupted files."""
 import hashlib
+from http.client import HTTPSConnection
 import json
 import os
 import socket
@@ -82,6 +83,38 @@ class ClientSessionTests(unittest.TestCase):
                                      download_dir=self.root / name, **kwargs)
         self.addCleanup(client.close)
         return client
+
+    def test_rejected_https_request_returns_response_with_unread_body(self):
+        server_tls, client_tls = tls_contexts(self.root)
+        for protected, size, expected in ((True, 8192, 401), (False, 5000, 400)):
+            for attempt in range(3):
+                with self.subTest(protected=protected, attempt=attempt):
+                    session = ClientSession(lambda *_: None, account_mode=True,
+                                            require_http_session=protected)
+                    with socket.socket() as listener:
+                        listener.bind(("127.0.0.1", 0))
+                        listener.listen()
+
+                        def serve():
+                            raw, _ = listener.accept()
+                            with server_tls.wrap_socket(raw, server_side=True) as connection:
+                                handle_request(connection, session)
+
+                        worker = threading.Thread(target=serve)
+                        worker.start()
+                        connection = HTTPSConnection("localhost", listener.getsockname()[1],
+                                                     context=client_tls, timeout=3)
+                        try:
+                            # http.client sends headers and body in separate TLS records.
+                            connection.request("POST", "/api/chat", b"x" * size,
+                                               {"Content-Type": "application/json"})
+                            response = connection.getresponse()
+                            self.assertEqual(response.status, expected)
+                            self.assertIn("error", json.loads(response.read()))
+                        finally:
+                            connection.close()
+                            worker.join(4)
+                        self.assertFalse(worker.is_alive())
 
     def test_http_login_chat_file_logout_relogin_and_revoked_token(self):
         server = self.server()

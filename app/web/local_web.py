@@ -355,6 +355,13 @@ def handle_request(connection, client):
         except OSError:
             pass
     finally:
+        # Send an orderly FIN after the response, including rejected uploads.
+        # Closing directly with unread request bytes can reset TCP on Windows.
+        if isinstance(connection, socket.socket):
+            try:
+                connection.shutdown(socket.SHUT_WR)
+            except OSError:
+                pass
         connection.close()
 
 
