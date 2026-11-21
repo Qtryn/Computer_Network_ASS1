@@ -38,7 +38,7 @@ app/           Client/server entry points, protocol, transport, features, securi
 scripts/       Key/certificate generation, smoke/load/UI tests and optional demos
 tests/         Unit and real-socket integration regressions
 docs/          Architecture and custom protocol specification
-report/        Reserved for the team's final Technical Explanation Report PDF
+report/        Final Technical Explanation Report PDF
 config/        Local generated key, TLS certificate/key and account store (gitignored)
 ```
 
@@ -140,21 +140,22 @@ Run from the project root after installing dependencies and generating the AES k
 node scripts/test_ui.cjs
 ```
 
-Local verification on **November 17, 2026** passed **97 Python tests**, smoke checks,
-**20 concurrent localhost clients**, and JavaScript UI checks. The suite includes
+The latest recorded full-suite verification on **November 18, 2026** passed
+**98 Python tests** and **20 concurrent localhost clients**. Separate recorded runs
+also passed smoke checks, JavaScript UI checks, and AIMD/receiver-credit checks.
+The suite includes
 actual CLI processes with verified HTTPS, a shared browser-style cookie jar,
 SQLite recovery after client/server restarts, concurrent files, fault injection,
 forged ACK rejection, receiver backpressure and AIMD recovery. A new real Wireshark
-capture on TCP 9100/UDP 9101 recorded 399 packets with no capture drops, including
+capture on TCP 9100/UDP 9101 recorded 389 packets with no capture drops, including
 byte-identical UDP retransmission and an encrypted 76-byte ACK.
-The JavaScript test uses a DOM double. A fresh **Chrome demo-mode UI check passed**
-private/broadcast messages, binary files in both directions with verified SHA-256,
-and Logout clearing Alice's feed while Bob remained connected. File selection and
-submission used the real browser UI; received bytes matched the 8192-byte fixture.
-Four targeted recovery/session/HTTP regressions also passed on recheck. Password
-registration/login and durable recovery were verified through automated HTTPS
-tests; the password-based Chrome authentication flow was not rerun. Earlier
-November 13 browser evidence predates this integration.
+The JavaScript test uses a DOM double. Separate **Chrome HTTPS account-mode checks
+passed** registration/login, private/broadcast chat, file transfer with receiver
+SHA-256 verification, and Logout. Two offline-composed messages retained their
+stable IDs across complete client/server restarts; after password reauthentication,
+both became DELIVERED, the pending count fell from two to zero, and each appeared
+once in the recipient inbox. An independent-stream experiment also delivered chat
+while a file-stream gap remained, followed by successful file verification.
 Detailed experimental artifacts are retained by the team in a development archive
 and can be provided on request; they are excluded from the submission tree.
 
@@ -188,9 +189,9 @@ run's printed UUIDs; `tcp.analysis.retransmission` does not identify UDP retries
 
 ## Report
 
-The final PDF will be added by the team in [report/](report/) as
-`Technical_Explanation_Report.pdf`. Report editing and upload are pending separately;
-this repository does not substitute a preview or an evidence-placeholder PDF.
+The final [Technical Explanation Report](report/Technical_Explanation_Report.pdf)
+covers the architecture, custom protocol, messaging and file-transfer workflows,
+recorded test results, experimental evidence, and implementation limitations.
 
 ## Team
 
